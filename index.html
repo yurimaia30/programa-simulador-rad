@@ -1,0 +1,1840 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>RadX - Simulador Prático Radiológico</title>
+
+<!-- Firebase SDK Compat via CDN -->
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+
+<style>
+  :root {
+    --primary: #1976d2;
+    --primary-dark: #102a43;
+    --accent: #00838f;
+    --bg-grad: linear-gradient(135deg, #102a43, #243b53);
+    --card-bg: #ffffff;
+    --success: #27ae60;
+    --danger: #e74c3c;
+    --warning: #f39c12;
+    --text-color: #102a43;
+    --text-muted: #627d98;
+    --border-color: #bcccdc;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    background: var(--bg-grad);
+    color: var(--text-color);
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+  }
+  header {
+    background: rgba(16, 42, 67, 0.95);
+    backdrop-filter: blur(8px);
+    border-bottom: 2px solid #00838f;
+    color: white;
+    padding: 12px 24px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 12px;
+  }
+  .header-brand { display: flex; flex-direction: column; }
+  .header-brand h2 { margin: 0; font-size: 1.25rem; color: #ffffff; display: flex; align-items: center; gap: 8px; }
+  .header-brand .institution { font-size: 0.85rem; color: #4dd0e1; font-weight: 600; letter-spacing: 0.5px; }
+  .header-brand .author-tag { font-size: 0.75rem; color: #9fb3c8; margin-top: 2px; }
+  .user-badge { display: flex; align-items: center; gap: 12px; font-size: 0.9rem; }
+  .container { max-width: 1100px; margin: auto; padding: 24px; width: 100%; flex: 1; }
+  .card {
+    background: var(--card-bg);
+    border-radius: 18px;
+    padding: 28px;
+    box-shadow: 0 16px 40px rgba(0,0,0,0.25);
+    margin-bottom: 24px;
+  }
+  .hidden { display: none !important; }
+  h1, h2, h3 { color: var(--primary-dark); margin-top: 0; }
+  .subtitle { color: var(--text-muted); line-height: 1.5; margin-bottom: 20px; }
+  input, select, textarea {
+    width: 100%;
+    padding: 10px 12px;
+    border: 2px solid var(--border-color);
+    border-radius: 10px;
+    font-size: 0.92rem;
+    margin-top: 6px;
+    margin-bottom: 14px;
+  }
+  input:focus, select:focus, textarea:focus { border-color: var(--primary); outline: none; }
+  label { font-weight: bold; font-size: 0.82rem; color: var(--primary-dark); }
+  button {
+    border: 0;
+    border-radius: 10px;
+    padding: 12px 20px;
+    font-size: 0.95rem;
+    cursor: pointer;
+    font-weight: 600;
+    background: var(--primary);
+    color: white;
+    transition: 0.2s;
+  }
+  button:hover { filter: brightness(1.1); transform: translateY(-1px); }
+  button.secondary { background: #627d98; }
+  button.danger { background: var(--danger); }
+  button.success { background: var(--success); }
+  button.sm { padding: 6px 12px; font-size: 0.8rem; border-radius: 6px; }
+  button.outline { background: transparent; border: 2px solid #4dd0e1; color: #4dd0e1; }
+  button.outline:hover { background: rgba(77, 208, 225, 0.1); }
+  button.active-mode { outline: 2px solid #ffd700; box-shadow: 0 0 8px #ffd700; }
+
+  .tabs { display: flex; gap: 10px; margin-bottom: 20px; border-bottom: 2px solid #e6e8eb; padding-bottom: 10px; flex-wrap: wrap; }
+  .tab-btn { background: #f0f4f8; color: var(--text-color); border: none; }
+  .tab-btn.active { background: var(--primary); color: white; }
+
+  .grid-stats {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 16px;
+    margin-bottom: 24px;
+  }
+  .stat-box {
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 12px;
+    padding: 16px;
+    text-align: center;
+  }
+  .stat-box .val { font-size: 2rem; font-weight: bold; color: var(--primary); }
+  .stat-box .desc { font-size: 0.85rem; color: var(--text-muted); }
+
+  .timeline-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: 16px;
+  }
+  .schedule-item {
+    border: 2px solid #e2e8f0;
+    border-radius: 14px;
+    padding: 18px;
+    position: relative;
+    background: #f8fafc;
+  }
+  .schedule-item.unlocked { border-color: var(--primary); background: #ffffff; }
+  .schedule-item.done { border-color: var(--success); background: #f0fdf4; }
+  .schedule-item .status {
+    position: absolute;
+    top: 14px;
+    right: 14px;
+    font-size: 0.75rem;
+    padding: 4px 8px;
+    border-radius: 6px;
+    font-weight: bold;
+  }
+  .status.open { background: #e0f2fe; color: #0284c7; }
+  .status.locked { background: #f1f5f9; color: #94a3b8; }
+  .status.completed { background: #dcfce7; color: #15803d; }
+
+  table { width: 100%; border-collapse: collapse; margin-top: 14px; }
+  th, td { padding: 12px; text-align: left; border-bottom: 1px solid #e2e8f0; font-size: 0.88rem; }
+  th { background: #f1f5f9; color: var(--primary-dark); }
+
+  /* FICHA DO PACIENTE */
+  .patient-card {
+    background: #f0f4f8;
+    border: 2px dashed #9fb3c8;
+    border-radius: 14px;
+    padding: 20px;
+    margin-bottom: 20px;
+  }
+  .req-box {
+    background: #ffffff;
+    border-left: 5px solid var(--accent);
+    padding: 14px;
+    border-radius: 8px;
+    margin-bottom: 18px;
+  }
+  .protocol-box {
+    background: #e6fffa;
+    border: 1px solid #b2f5ea;
+    border-radius: 10px;
+    padding: 16px;
+    margin-top: 15px;
+  }
+
+  /* ESTAÇÃO RADIOLÓGICA */
+  .viewer-container {
+    background: #000000;
+    border-radius: 12px;
+    border: 2px solid #334e68;
+    overflow: hidden;
+    margin: 18px 0;
+  }
+  .viewer-incidences {
+    background: #0b1d3a;
+    padding: 8px 14px;
+    display: flex;
+    gap: 8px;
+    border-bottom: 1px solid #1e3a5f;
+    flex-wrap: wrap;
+    align-items: center;
+  }
+  .incidence-btn {
+    background: #1e3a5f;
+    color: #bcccdc;
+    border: 1px solid #334e68;
+    padding: 6px 14px;
+    font-size: 0.85rem;
+    border-radius: 6px;
+    cursor: pointer;
+  }
+  .incidence-btn.active {
+    background: var(--accent);
+    color: #ffffff;
+    border-color: #4dd0e1;
+    font-weight: bold;
+  }
+  .viewer-toolbar {
+    background: #102a43;
+    padding: 10px 14px;
+    display: flex;
+    gap: 12px;
+    align-items: center;
+    flex-wrap: wrap;
+    color: #bcccdc;
+    font-size: 0.85rem;
+  }
+  .viewer-toolbar label { color: #f0f4f8; margin: 0; display: flex; align-items: center; gap: 6px; }
+  .viewer-toolbar input[type="range"] { margin: 0; width: 85px; accent-color: var(--accent); }
+  .viewer-viewport {
+    height: 480px;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    overflow: hidden;
+    background: radial-gradient(circle, #1a1a1a 0%, #000000 100%);
+    position: relative;
+    cursor: crosshair;
+  }
+  .viewer-viewport img {
+    max-height: 92%;
+    max-width: 92%;
+    object-fit: contain;
+    transition: transform 0.1s ease-out;
+    user-select: none;
+    pointer-events: none;
+  }
+
+  /* MARCADORES SOBRE A IMAGEM */
+  .lesion-marker {
+    position: absolute;
+    width: 26px;
+    height: 26px;
+    border: 3px solid #ff1744;
+    border-radius: 50%;
+    transform: translate(-50%, -50%);
+    box-shadow: 0 0 10px #ff1744;
+    pointer-events: none;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 5;
+  }
+  .lesion-marker::after {
+    content: '';
+    width: 6px;
+    height: 6px;
+    background: #ff1744;
+    border-radius: 50%;
+  }
+
+  .side-marker {
+    position: absolute;
+    width: 32px;
+    height: 32px;
+    background: rgba(255, 215, 0, 0.95);
+    color: #000000;
+    font-weight: 900;
+    font-size: 1.1rem;
+    border-radius: 6px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transform: translate(-50%, -50%);
+    box-shadow: 0 0 12px rgba(255, 215, 0, 0.9);
+    pointer-events: none;
+    z-index: 6;
+    border: 2px solid #ffffff;
+  }
+
+  .topbar { display: flex; justify-content: space-between; gap: 10px; margin-bottom: 15px; flex-wrap: wrap; }
+  .badge { background: #eaf2f8; padding: 8px 12px; border-radius: 8px; font-weight: bold; font-size: 0.9rem; }
+
+  footer { text-align: center; padding: 16px; color: #829ab1; font-size: 0.85rem; }
+</style>
+</head>
+<body>
+
+<header id="mainHeader">
+  <div class="header-brand">
+    <h2>☢️ Sistema de Posicionamento e Prática Radiográfica</h2>
+    <span class="institution">RadX • Plataforma de Simulação</span>
+    <span class="author-tag">Desenvolvido por: <b>Yuri Maia</b></span>
+  </div>
+  <div class="user-badge" id="headerAuthArea">
+    <span id="headerSyncStatus" style="font-size:0.8rem; background:#15803d; padding:4px 8px; border-radius:6px; color:#ffffff;">☁️ Firebase Firestore Ativo</span>
+    <span id="headerUser" class="hidden">Conectado: Visitante</span>
+    <button id="logoutBtn" class="outline hidden" style="padding:6px 12px;font-size:0.8rem;" onclick="logout()">Sair</button>
+  </div>
+</header>
+
+<div class="container">
+
+  <!-- LOGIN -->
+  <section id="loginScreen" class="card" style="max-width:480px; margin: 40px auto;">
+    <div style="text-align:center; margin-bottom: 20px;">
+      <span style="font-size:0.95rem; font-weight:bold; color:var(--accent); text-transform:uppercase; letter-spacing:1.5px;">RadX</span>
+      <h1 style="margin-top:5px; margin-bottom:8px;">Portal Radiológico</h1>
+      <p class="subtitle" style="margin-bottom:5px;">Estação Prática de Exames e Laudos Radiológicos</p>
+      <small style="color:var(--text-muted);">Desenvolvido por Yuri Maia</small>
+    </div>
+
+    <div>
+      <label>Perfil de Acesso</label>
+      <select id="loginRole" onchange="toggleLoginInputs()">
+        <option value="admin">Administrador Geral</option>
+        <option value="teacher">Professor</option>
+        <option value="student">Aluno</option>
+      </select>
+    </div>
+    
+    <div id="loginUserField">
+      <label id="loginUserLabel">Usuário do Administrador</label>
+      <input type="text" id="loginUsername" value="admin" placeholder="Informe sua credencial">
+    </div>
+
+    <div id="loginPasswordField">
+      <label>Senha de Administrador</label>
+      <input type="password" id="loginPassword" placeholder="Digite sua senha">
+    </div>
+
+    <button style="width: 100%; margin-top:10px;" onclick="handleLogin()">Entrar no Sistema</button>
+    
+    <div style="background:#f8fafc; border:1px solid #e2e8f0; border-radius:10px; padding:12px; margin-top:20px; font-size:0.8rem; color:#627d98;">
+      <b>Acessos Padrão:</b><br>
+      • <b>Admin:</b> admin (senha: <code>admin123</code>)<br>
+      • <b>Professor:</b> prof10<br>
+      • <b>Aluno:</b> aluno101
+    </div>
+  </section>
+
+  <!-- PAINEL ADMINISTRADOR -->
+  <section id="adminScreen" class="card hidden">
+    <h1>Painel de Controle do Administrador</h1>
+    <p class="subtitle">Gestão de turmas, alunos, docentes e segurança em nuvem.</p>
+    
+    <div class="tabs">
+      <button class="tab-btn active" onclick="switchAdminTab('cad-classes', this)">Gerenciar Turmas</button>
+      <button class="tab-btn" onclick="switchAdminTab('cad-student', this)">Cadastrar Aluno</button>
+      <button class="tab-btn" onclick="switchAdminTab('cad-teacher', this)">Cadastrar Professor</button>
+      <button class="tab-btn" onclick="switchAdminTab('list-users', this)">Quadro Geral</button>
+      <button class="tab-btn" onclick="switchAdminTab('admin-security', this)">🔒 Senha</button>
+    </div>
+
+    <!-- Turmas -->
+    <div id="cad-classes" class="admin-tab">
+      <h3 id="classFormTitle">Cadastrar Nova Turma</h3>
+      <input type="hidden" id="editingClassId" value="">
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+        <div>
+          <label>Código da Turma</label>
+          <input type="text" id="classCode" placeholder="Ex: RAD-2026.1M">
+        </div>
+        <div>
+          <label>Identificação / Nome da Turma</label>
+          <input type="text" id="className" placeholder="Ex: Turma Manhã 2026.1">
+        </div>
+      </div>
+      <div>
+        <label>Turno</label>
+        <select id="classShift">
+          <option value="Manhã">Manhã</option>
+          <option value="Tarde">Tarde</option>
+          <option value="Noite">Noite</option>
+          <option value="Sábado">Sábado</option>
+        </select>
+      </div>
+      <div style="display: flex; gap: 10px;">
+        <button id="saveClassBtn" onclick="saveClass()">Salvar Turma</button>
+        <button id="cancelClassEditBtn" class="secondary hidden" onclick="cancelClassEdit()">Cancelar Edição</button>
+      </div>
+
+      <h3 style="margin-top: 30px;">Turmas Cadastradas no Firestore</h3>
+      <table>
+        <thead>
+          <tr><th>Código</th><th>Nome</th><th>Turno</th><th>Alunos</th><th style="width: 150px;">Ações</th></tr>
+        </thead>
+        <tbody id="classesTableBody"></tbody>
+      </table>
+    </div>
+
+    <!-- Aluno -->
+    <div id="cad-student" class="admin-tab hidden">
+      <h3>Novo Aluno</h3>
+      <label>Nome Completo do Aluno</label>
+      <input type="text" id="studentRegName" placeholder="Ex: Lucas Ferreira Maia">
+      <label>Matrícula do Aluno</label>
+      <input type="text" id="studentRegId" placeholder="Ex: aluno103">
+      <label>Turma Vinculada</label>
+      <select id="studentRegClass"></select>
+
+      <button onclick="saveStudent()">Cadastrar Aluno</button>
+    </div>
+
+    <!-- Professor -->
+    <div id="cad-teacher" class="admin-tab hidden">
+      <h3>Novo Professor</h3>
+      <label>Nome Completo</label>
+      <input type="text" id="teacherName" placeholder="Ex: Yuri Maia">
+      <label>Matrícula / ID Docente</label>
+      <input type="text" id="teacherId" placeholder="Ex: prof20">
+      <button onclick="saveTeacher()">Cadastrar Professor</button>
+    </div>
+
+    <!-- Quadro Geral -->
+    <div id="list-users" class="admin-tab hidden">
+      <h3>Quadro Geral de Usuários</h3>
+      <table>
+        <thead>
+          <tr><th>Tipo</th><th>Nome</th><th>Matrícula/ID</th><th>Turma / Detalhes</th></tr>
+        </thead>
+        <tbody id="userTableBody"></tbody>
+      </table>
+    </div>
+
+    <!-- Alteração de Senha -->
+    <div id="admin-security" class="admin-tab hidden" style="max-width: 500px;">
+      <h3>Alterar Senha do Administrador</h3>
+      <label>Senha Atual</label>
+      <input type="password" id="currentAdminPass" placeholder="Digite a senha atual">
+      <label>Nova Senha</label>
+      <input type="password" id="newAdminPass" placeholder="Digite a nova senha">
+      <label>Confirmar Nova Senha</label>
+      <input type="password" id="confirmNewAdminPass" placeholder="Confirme a nova senha">
+      <button onclick="changeAdminPassword()">Atualizar Senha</button>
+    </div>
+  </section>
+
+  <!-- PAINEL DO PROFESSOR -->
+  <section id="teacherScreen" class="card hidden">
+    <h1>Dashboard do Docente</h1>
+    <p class="subtitle">Controle de práticas em sala, correção de laudos e notas em tempo real.</p>
+
+    <div class="tabs">
+      <button class="tab-btn active" onclick="switchTeacherTab('t-modules', this)">🔓 Liberação de Práticas</button>
+      <button class="tab-btn" onclick="switchTeacherTab('t-submissions', this)">📋 Laudos & Avaliações (<span id="pendingReportsCount">0</span>)</button>
+      <button class="tab-btn" onclick="switchTeacherTab('t-analytics', this)">📊 Rendimento da Turma</button>
+    </div>
+
+    <div id="t-modules" class="teacher-tab">
+      <div style="background: #eaf2f8; border: 2px solid #b8daff; border-radius: 14px; padding: 18px; margin-bottom: 20px;">
+        <h3 style="margin-top:0; color:#0c5460;">Liberar / Bloquear Práticas em Sala</h3>
+        <p style="font-size:0.88rem; color:#486581; margin-bottom:12px;">
+          Ao clicar em <b>Liberar</b>, os computadores dos alunos recebem a atualização imediatamente.
+        </p>
+        <table>
+          <thead>
+            <tr><th>Prática</th><th>Estrutura Anatômica</th><th>Status</th><th style="width: 160px;">Ação</th></tr>
+          </thead>
+          <tbody id="teacherModuleControlBody"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <div id="t-submissions" class="teacher-tab hidden">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px; flex-wrap:wrap; gap:10px;">
+        <h3 style="margin:0;">Laudos Técnicos e Anamneses Recebidas</h3>
+        <div style="display:flex; gap:8px; align-items:center;">
+          <label style="margin:0;">Filtrar por Turma:</label>
+          <select id="teacherClassFilter" onchange="renderTeacherSubmissions()" style="width:auto; margin:0; padding:6px 12px;">
+            <option value="ALL">Todas as Turmas</option>
+          </select>
+        </div>
+      </div>
+      <table>
+        <thead>
+          <tr>
+            <th>Data</th>
+            <th>Aluno</th>
+            <th>Turma</th>
+            <th>Prática</th>
+            <th>Status</th>
+            <th>Nota Prática</th>
+            <th style="width:130px;">Avaliar</th>
+          </tr>
+        </thead>
+        <tbody id="submissionsTableBody"></tbody>
+      </table>
+    </div>
+
+    <div id="t-analytics" class="teacher-tab hidden">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
+        <h3 style="margin:0;">Quadro Geral de Rendimento</h3>
+        <button class="success sm" onclick="exportGradesToCSV()">📥 Baixar Caderneta (CSV)</button>
+      </div>
+
+      <div class="grid-stats">
+        <div class="stat-box">
+          <div class="val" id="totalStudentsCount">0</div>
+          <div class="desc">Alunos Matriculados</div>
+        </div>
+        <div class="stat-box">
+          <div class="val" id="totalReportsCount">0</div>
+          <div class="desc">Laudos Submetidos</div>
+        </div>
+      </div>
+
+      <h3 style="margin-top:25px;">Quadro de Alunos</h3>
+      <table>
+        <thead>
+          <tr><th>Matrícula</th><th>Aluno</th><th>Turma</th><th>Práticas Feitas</th><th>Média Prática</th><th>Status</th></tr>
+        </thead>
+        <tbody id="studentProgressBody"></tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- MODAL DE CORREÇÃO DO LAUDO -->
+  <section id="evalModalScreen" class="card hidden">
+    <div class="topbar">
+      <div class="badge">📝 Avaliação de Prática Radiológica</div>
+      <div class="badge">Aluno: <span id="evalStudentName"></span></div>
+      <div class="badge">Turma: <span id="evalStudentClass"></span></div>
+    </div>
+
+    <h3>Prática: <span id="evalModuleName"></span></h3>
+    
+    <div style="display:grid; grid-template-columns: 1fr 1fr; gap:16px; margin-bottom:16px;">
+      <div style="background:#f8fafc; border:1px solid #bcccdc; border-radius:10px; padding:14px;">
+        <h4 style="margin:0 0 6px 0; color:var(--primary-dark);">📄 Conduta e Protocolo Técnico:</h4>
+        <div id="evalProtocolDetails" style="font-size:0.88rem; color:#243b53; line-height:1.5;"></div>
+      </div>
+      <div style="background:#f8fafc; border:1px solid #bcccdc; border-radius:10px; padding:14px;">
+        <h4 style="margin:0 0 6px 0; color:var(--primary-dark);">📝 Laudo Técnico do Aluno:</h4>
+        <p id="evalReportText" style="margin:0; font-size:0.9rem; color:#243b53; font-style:italic; line-height:1.4;"></p>
+      </div>
+    </div>
+
+    <h4 style="margin-bottom:6px;">Inspeção Radiográfica (Marcação Anatômica e Fratura):</h4>
+    <div class="viewer-container" style="margin:0 0 16px 0;">
+      <div class="viewer-viewport" style="height:350px; cursor:default;">
+        <img id="evalRadImg" src="" alt="Imagem Analisada">
+        <div id="evalMarker" class="lesion-marker hidden"></div>
+        <div id="evalSideMarker" class="side-marker hidden"></div>
+      </div>
+    </div>
+
+    <div style="background:#eaf2f8; border:2px solid #b8daff; border-radius:12px; padding:18px;">
+      <h4 style="margin-top:0; color:#0c5460;">Devolutiva e Nota do Docente</h4>
+      <div style="display:grid; grid-template-columns: 150px 1fr; gap:14px;">
+        <div>
+          <label>Nota Prática (0 a 10):</label>
+          <input type="number" id="evalGradeInput" min="0" max="10" step="0.5" placeholder="Ex: 9.5">
+        </div>
+        <div>
+          <label>Feedback Pedagógico ao Aluno:</label>
+          <input type="text" id="evalFeedbackInput" placeholder="Ex: Correto posicionamento e identificação cortical.">
+        </div>
+      </div>
+      <div style="display:flex; justify-content:space-between; margin-top:10px;">
+        <button class="secondary" onclick="closeEvalModal()">Cancelar</button>
+        <button class="success" onclick="saveEvaluation()">✓ Gravar e Enviar Feedback</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- PAINEL DO ALUNO -->
+  <section id="studentScreen" class="card hidden">
+    <div style="margin-bottom: 15px;">
+      <h1 style="margin-bottom:4px;">Estações e Atendimentos Práticos</h1>
+      <p class="subtitle" style="margin-bottom:5px;">Selecione o caso clínico disponível para abrir a ficha de anamnese e inspecionar os exames.</p>
+    </div>
+    <div class="timeline-grid" id="timelineGrid"></div>
+  </section>
+
+  <!-- FICHA DE ADMISSÃO E CONDUTA TÉCNICA (ANAMNESE) -->
+  <section id="patientRegScreen" class="card hidden">
+    <div class="topbar">
+      <div class="badge">🏥 Caso Clínico: <span id="regModTitle"></span></div>
+      <div class="badge">👨‍🎓 Operador: <span id="regStudentName"></span></div>
+    </div>
+
+    <h2>📋 Ficha de Atendimento e Conduta Radiológica</h2>
+    <p class="subtitle">Confira a solicitação médica e planeje a execução técnica do exame antes de abrir a Estação de Raio-X.</p>
+
+    <div class="req-box">
+      <h4 style="margin:0 0 6px 0; color:var(--primary-dark);">📄 Solicitação Médica / Guia de Encaminhamento:</h4>
+      <p id="reqDescription" style="margin:0; font-size:0.95rem; color:#243b53; line-height:1.4;"></p>
+    </div>
+
+    <div class="patient-card">
+      <div style="display:grid; grid-template-columns: 2fr 1fr; gap:14px;">
+        <div>
+          <label>Nome do Paciente</label>
+          <input type="text" id="patientNameInput" readonly style="background:#e2e8f0; cursor:not-allowed;">
+        </div>
+        <div>
+          <label>Prontuário</label>
+          <input type="text" id="patientRecordInput" readonly style="background:#e2e8f0; cursor:not-allowed;">
+        </div>
+      </div>
+
+      <div style="display:grid; grid-template-columns: 1fr 1fr 1fr; gap:14px;">
+        <div>
+          <label>Idade</label>
+          <input type="text" id="patientAgeInput" placeholder="Ex: 34 anos">
+        </div>
+        <div>
+          <label>Sexo</label>
+          <select id="patientSexInput">
+            <option value="M">Masculino</option>
+            <option value="F">Feminino</option>
+          </select>
+        </div>
+        <div>
+          <label>Região Anatômica Solicitada</label>
+          <input type="text" id="patientRegionInput" readonly style="background:#e2e8f0; cursor:not-allowed;">
+        </div>
+      </div>
+
+      <label>Anamnese Rápida e Queixa Principal:</label>
+      <textarea id="patientAnamnesisInput" rows="2" placeholder="Descreva os sintomas relatados pelo paciente..."></textarea>
+
+      <div class="protocol-box">
+        <h4 style="margin:0 0 10px 0; color:#0c5460;">⚙️ Planejamento Técnico da Execução do Exame:</h4>
+        <div style="display:grid; grid-template-columns: 1fr 1fr; gap:12px;">
+          <div>
+            <label>Incidências que Serão Realizadas:</label>
+            <input type="text" id="techIncidences" placeholder="Ex: AP e Perfil verdadeiro">
+          </div>
+          <div>
+            <label>Distância Foco-Receptor (DFOFI):</label>
+            <select id="techDfofi">
+              <option value="100 cm">100 cm (Padrão mesa/estativa)</option>
+              <option value="120 cm">120 cm</option>
+              <option value="150 cm">150 cm</option>
+              <option value="180 cm">180 cm (Tórax/Cervical)</option>
+            </select>
+          </div>
+        </div>
+        <div style="display:grid; grid-template-columns: 1fr 1fr; gap:12px;">
+          <div>
+            <label>Uso de Grade / Bucky:</label>
+            <select id="techBucky">
+              <option value="Mesa fora de Bucky (sem grade)">Fora do Bucky (Sem Grade - Extremidades)</option>
+              <option value="Bucky Mesa (com grade)">Bucky Mesa (Com Grade)</option>
+              <option value="Mural Bucky (Estativa Vertical)">Mural Bucky (Vertical)</option>
+            </select>
+          </div>
+          <div>
+            <label>Fatores Técnicos Estimados (kV e mAs):</label>
+            <input type="text" id="techFactors" placeholder="Ex: 50 kV / 4 mAs">
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div style="display:flex; justify-content:space-between; align-items:center;">
+      <button class="secondary" onclick="exitPatientScreen()">← Voltar</button>
+      <button class="success" onclick="confirmPatientAndOpenStation()">✓ Abrir Estação Radiológica →</button>
+    </div>
+  </section>
+
+  <!-- ESTAÇÃO RADIOLÓGICA (COM FERRAMENTAS D/E, POINTER E LAUDO) -->
+  <section id="stationScreen" class="card hidden">
+    <div class="topbar">
+      <div class="badge">👨‍🎓 Operador: <span id="stationPlayer"></span></div>
+      <div class="badge">👤 Paciente: <span id="stationPatient"></span></div>
+      <div class="badge" style="background:#e0f2fe; color:#0284c7;">🔬 Estação Digital RadX</div>
+    </div>
+
+    <div class="subtitle" id="stationFaseTitle" style="font-weight:bold; color:var(--primary);"></div>
+
+    <div class="viewer-container">
+      <div class="viewer-incidences" id="incidenceSelectorBar"></div>
+
+      <div class="viewer-toolbar">
+        <span style="color:#4dd0e1; font-weight:bold;">☢️ Ferramentas:</span>
+        <label>☀️ Brilho <input type="range" id="vBrightness" min="30" max="200" value="100" oninput="applyViewerFilters()"></label>
+        <label>🌓 Contraste <input type="range" id="vContrast" min="50" max="250" value="100" oninput="applyViewerFilters()"></label>
+        <button class="sm secondary" onclick="toggleNegative()">🔄 Negativo</button>
+        <button class="sm secondary" onclick="adjustZoom(0.2)">🔍 +</button>
+        <button class="sm secondary" onclick="adjustZoom(-0.2)">🔍 -</button>
+        <button class="sm secondary" onclick="rotateImage()">↻ Girar 90°</button>
+        <button class="sm outline" onclick="resetViewer()">↺ Reset</button>
+      </div>
+
+      <div style="background:#1e3a5f; padding:8px 14px; display:flex; gap:10px; align-items:center; flex-wrap:wrap; border-top:1px solid #334e68;">
+        <span style="color:#ffd700; font-weight:bold; font-size:0.85rem;">📍 Marcação na Imagem:</span>
+        <button id="btnToolSideD" class="sm secondary" onclick="setClickMode('side-D')">Marcar Lado D</button>
+        <button id="btnToolSideE" class="sm secondary" onclick="setClickMode('side-E')">Marcar Lado E</button>
+        <button id="btnToolLesion" class="sm secondary active-mode" onclick="setClickMode('lesion')">Apontar Suspeita/Fratura</button>
+        <button class="sm danger" onclick="clearAllMarkers()">❌ Limpar Marcadores</button>
+      </div>
+
+      <div class="viewer-viewport" id="viewportArea" onclick="handleImageClick(event)" title="Clique para posicionar o marcador selecionado">
+        <img id="radImage" src="" alt="Exame Radiográfico do Paciente">
+        <div id="stationMarker" class="lesion-marker hidden" title="Fratura/Lesão"></div>
+        <div id="stationSideMarker" class="side-marker hidden" title="Lado Anatômico">D</div>
+      </div>
+    </div>
+
+    <div style="background:#f8fafc; border:1px solid #bcccdc; border-radius:12px; padding:16px; margin-top:15px;">
+      <h4 style="margin:0 0 6px 0; color:var(--primary-dark);">📝 Laudo Técnico do Operador:</h4>
+      <p style="margin:0 0 10px 0; font-size:0.85rem; color:#486581;">
+        💡 <b>Instruções:</b> Posicione a marcação anatômica (<b>D</b> ou <b>E</b>), aponte a fratura sobre a imagem e formule o laudo para o professor.
+      </p>
+      <textarea id="stationReport" rows="3" placeholder="Descreva os achados radiológicos (alinhamento cortical, densidades, espaços articulares e conclusão diagnóstica)..."></textarea>
+    </div>
+
+    <div style="margin-top:20px; text-align:right;">
+      <button class="success" onclick="finishAndSubmitReport()">✓ Enviar Laudo e Protocolo para Avaliação</button>
+    </div>
+  </section>
+
+</div>
+
+<footer>
+  RadX • Plataforma de Posicionamento e Simulação Radiológica | Desenvolvido por Yuri Maia &copy; 2026
+</footer>
+
+<script>
+/* =======================================================
+   CONEXÃO COM O FIREBASE CLOUD FIRESTORE
+======================================================= */
+const FIREBASE_CONFIG = {
+  apiKey: "SUA_API_KEY_AQUI",
+  authDomain: "seu-projeto.firebaseapp.com",
+  projectId: "seu-projeto-id",
+  storageBucket: "seu-projeto.appspot.com",
+  messagingSenderId: "000000000000",
+  appId: "1:000000000000:web:000000000000"
+};
+
+let db = null;
+if (window.firebase) {
+  try {
+    firebase.initializeApp(FIREBASE_CONFIG);
+    db = firebase.firestore();
+  } catch(e) {
+    console.warn("Firebase não inicializado. Verifique suas credenciais.", e);
+  }
+}
+
+// Catálogo nativo com suporte a Neonatologia e imagens locais
+const DEFAULT_SCHEDULE = [
+  { 
+    id: 1, 
+    title: "Dedos da Mão", 
+    desc: "Posicionamentos de rotina e especiais para quirodáctilos.", 
+    unlockedByTeacher: true,
+    patient: {
+      name: "José Ferreira de Souza",
+      record: "PR-2026-0182",
+      age: "28 anos",
+      sex: "M",
+      region: "Dedos da Mão Direita",
+      request: "Trauma contuso direto. Solicito estudo dos quirodáctilos para exclusão de fratura articular na base das falanges.",
+      images: [
+        { label: "Incidência 1: Dedos Geral", url: "./imagens/dedos.jpeg" }
+      ]
+    }
+  },
+  { 
+    id: 2, 
+    title: "Mão", 
+    desc: "Prática de Posicionamento e Incidências de Mão (PA, Oblíqua e Lateral).", 
+    unlockedByTeacher: true,
+    patient: {
+      name: "Pedro Henrique Alencar",
+      record: "PR-2026-0195",
+      age: "11 anos",
+      sex: "M",
+      region: "Mão Direita (PA, Oblíqua e Lateral)",
+      request: "Estudo radiográfico da mão com rotina completa para análise de espaços articulares e centros de ossificação.",
+      images: [
+        { label: "Incidência 1: Mão em PA", url: "./imagens/mao_pa.png" },
+        { label: "Incidência 2: Mão em Oblíqua", url: "./imagens/mao_obliquo.jpg" },
+        { label: "Incidência 3: Mão em Perfil", url: "./imagens/mao_lateral.jpeg" }
+      ]
+    }
+  },
+  { 
+    id: 3, 
+    title: "Punho", 
+    desc: "Prática de Posicionamento e Incidências de Punho e Pesquisa Carpal.", 
+    unlockedByTeacher: true,
+    patient: {
+      name: "Camila Fernandes Barros",
+      record: "PR-2026-0210",
+      age: "35 anos",
+      sex: "F",
+      region: "Punho Esquerdo",
+      request: "Queda sobre a mão espalmada. Dor aguda na tabaqueira anatômica; pesquisa de fratura carpal.",
+      images: [
+        { label: "Incidência 1: Punho em PA", url: "./imagens/punho_pa.jpg" },
+        { label: "Incidência 2: Punho em Perfil", url: "./imagens/punho_perfil.jpeg" },
+        { label: "Incidência 3: Pesquisa de Fratura", url: "./imagens/punho_fratura.jpg" }
+      ]
+    }
+  },
+  { 
+    id: 4, 
+    title: "Antebraço", 
+    desc: "Prática de Posicionamento e Incidências de Antebraço (AP e Perfil).", 
+    unlockedByTeacher: true,
+    patient: {
+      name: "Antônio Marcos de Lima",
+      record: "PR-2026-0222",
+      age: "42 anos",
+      sex: "M",
+      region: "Antebraço Direito",
+      request: "Avaliação cortical de rádio e ulna. Realizar AP em supinação anatômica e Perfil verdadeiro a 90°.",
+      images: [
+        { label: "Incidência 1: Antebraço em AP", url: "./imagens/antebraco_ap.png" },
+        { label: "Incidência 2: Antebraço em Perfil", url: "./imagens/antebraco_perfil.png" }
+      ]
+    }
+  },
+  { 
+    id: 5, 
+    title: "Cotovelo", 
+    desc: "Incidências de Cotovelo - Perfil Verdadeiro a 90°.", 
+    unlockedByTeacher: true,
+    patient: {
+      name: "Mariana Vasconcelos",
+      record: "PR-2026-0238",
+      age: "24 anos",
+      sex: "F",
+      region: "Cotovelo Direito",
+      request: "Perfil absoluto com flexão de 90° para avaliação dos coxins adiposos articulares e olécrano.",
+      images: [
+        { label: "Incidência 1: Cotovelo em Perfil", url: "./imagens/cotovelo_perfil.png" }
+      ]
+    }
+  },
+  { 
+    id: 6, 
+    title: "Úmero", 
+    desc: "Prática de Posicionamento e Incidências de Úmero.", 
+    unlockedByTeacher: true,
+    patient: {
+      name: "Francisco de Assis Costa",
+      record: "PR-2026-0245",
+      age: "58 anos",
+      sex: "M",
+      region: "Úmero Esquerdo",
+      request: "Investigação da diáfise umeral após trauma contuso direto.",
+      images: [
+        { label: "Incidência 1: Estudo do Úmero", url: "./imagens/umero.jpeg" }
+      ]
+    }
+  },
+  { 
+    id: 7, 
+    title: "Cintura Escapular e Ombro", 
+    desc: "Incidências de Ombro e Articulação Glenoumeral.", 
+    unlockedByTeacher: true,
+    patient: {
+      name: "Raimundo Nonato",
+      record: "PR-2026-0259",
+      age: "61 anos",
+      sex: "M",
+      region: "Ombro e Articulação Glenoumeral",
+      request: "Dor escapular com limitação de abdução. Rotina de ombro para descarte de luxação.",
+      images: [
+        { label: "Incidência 1: Ombro Rotina", url: "./imagens/ombro.jpeg" }
+      ]
+    }
+  },
+  { 
+    id: 8, 
+    title: "Escápula", 
+    desc: "Prática de Posicionamentos Especiais de Escápula.", 
+    unlockedByTeacher: true,
+    patient: {
+      name: "Francisca Silva de Moura",
+      record: "PR-2026-0270",
+      age: "49 anos",
+      sex: "F",
+      region: "Escápula",
+      request: "Suspeita de lesão da borda escapular e acrômio.",
+      images: [
+        { label: "Incidência 1: Estudo da Escápula", url: "./imagens/escapula.jpeg" }
+      ]
+    }
+  },
+  { 
+    id: 9, 
+    title: "Fêmur e Joelho", 
+    desc: "Avaliação de fratura de fêmur e perfil articular do joelho.", 
+    unlockedByTeacher: true,
+    patient: {
+      name: "Marcelo Teixeira",
+      record: "PR-2026-0301",
+      age: "29 anos",
+      sex: "M",
+      region: "Fêmur e Joelho Esquerdo",
+      request: "Politraumatismo: avaliação urgente da diáfise femoral e perfil articular do joelho.",
+      images: [
+        { label: "Incidência 1: Fêmur Fratura", url: "./imagens/femur_fratura.jpg" },
+        { label: "Incidência 2: Joelho em Perfil", url: "./imagens/joelho_perfil.jpg" }
+      ]
+    }
+  },
+  { 
+    id: 10, 
+    title: "Perna (Tíbia e Fíbula)", 
+    desc: "Rotina de trauma para tíbia e fíbula com articulações adjacentes.", 
+    unlockedByTeacher: true,
+    patient: {
+      name: "Juliana Medeiros",
+      record: "PR-2026-0329",
+      age: "21 anos",
+      sex: "F",
+      region: "Perna (Tíbia e Fíbula)",
+      request: "Trauma automobilístico: radiografia de perna incluindo as articulações proximal e distal.",
+      images: [
+        { label: "Incidência 1: Perna (Tíbia e Fíbula)", url: "./imagens/perna.webp" }
+      ]
+    }
+  },
+  { 
+    id: 11, 
+    title: "Calcâneo e Retropé", 
+    desc: "Avaliação de tuberosidade do calcâneo e sustentáculo do tálus.", 
+    unlockedByTeacher: true,
+    patient: {
+      name: "Valdemar Bezerra",
+      record: "PR-2026-0342",
+      age: "52 anos",
+      sex: "M",
+      region: "Calcâneo e Retropé",
+      request: "Queda de nível com impacto no calcanhar. Avaliação da tuberosidade do calcâneo.",
+      images: [
+        { label: "Incidência 1: Estudo do Calcâneo", url: "./imagens/calcaneo.webp" }
+      ]
+    }
+  },
+  { 
+    id: 12, 
+    title: "Artelhos / Pododáctilos", 
+    desc: "Incidências em AP e oblíqua para pododáctilos.", 
+    unlockedByTeacher: true,
+    patient: {
+      name: "Larissa Kelly",
+      record: "PR-2026-0355",
+      age: "19 anos",
+      sex: "F",
+      region: "Pododáctilos / Artelhos",
+      request: "Contusão direta no hálux. AP e oblíqua interna para abertura dos espaços interfalângicos.",
+      images: [
+        { label: "Incidência 1: Radiografia de Artelhos", url: "./imagens/artelhos.jpeg" }
+      ]
+    }
+  },
+  { 
+    id: 13, 
+    title: "Unidade Neonatal (UTI Neo)", 
+    desc: "Rotina de radiografia no leito/incubadora (Tórax e Abdómen do Recém-Nascido).", 
+    unlockedByTeacher: true,
+    patient: {
+      name: "RN de Mariana Souza",
+      record: "NEO-2026-0042",
+      age: "4 dias",
+      sex: "F",
+      region: "Tórax e Abdómen em Decúbito Dorsal (Incubadora)",
+      request: "Recém-nascido prematuro com desconforto respiratório. Solicito radiografia no leito (AP de Tórax e Abdómen) para controlo de posicionamento de cânula endotraqueal e cateter umbilical.",
+      images: [
+        { label: "Incidência 1: Tórax e Abdómen AP (Leito)", url: "./imagens/neonatal_torax_abdomen.jpg" },
+        { label: "Incidência 2: Perfil Horizontal / Decúbito", url: "./imagens/neonatal_perfil.jpg" }
+      ]
+    }
+  }
+];
+
+// Estado da aplicação mantido em memória
+let state = {
+  currentUser: null,
+  adminPassword: 'admin123',
+  classes: [
+    { code: "RAD-2026.1M", name: "Turma Manhã", shift: "Manhã" },
+    { code: "RAD-2026.1N", name: "Turma Noite", shift: "Noite" }
+  ],
+  schedule: DEFAULT_SCHEDULE,
+  teachers: [
+    { id: "prof10", name: "Prof. Yuri Maia" }
+  ],
+  students: [
+    { id: "aluno101", name: "Carlos Eduardo", class: "RAD-2026.1M", completedFases: [] },
+    { id: "aluno102", name: "Ana Beatriz", class: "RAD-2026.1M", completedFases: [] }
+  ],
+  submissions: [],
+  currentPracticeCase: null,
+  activeImageIndex: 0,
+  clickMode: 'lesion',
+  currentPractice: {
+    protocol: {},
+    anamnesis: "",
+    markerCoords: null,
+    sideMarkerCoords: null
+  },
+  viewer: {
+    brightness: 100,
+    contrast: 100,
+    negative: false,
+    zoom: 1,
+    rotation: 0
+  }
+};
+
+/* =======================================================
+   SINCRONIZAÇÃO EM TEMPO REAL FIRESTORE
+======================================================= */
+function listenCloudUpdates() {
+  if (!db) return;
+
+  db.collection("radx_config").doc("academic_data").onSnapshot(doc => {
+    if (doc.exists) {
+      const data = doc.data();
+      if (data.students) state.students = data.students;
+      if (data.classes) state.classes = data.classes;
+      if (data.teachers) state.teachers = data.teachers;
+      if (data.adminPassword) state.adminPassword = data.adminPassword;
+      if (state.currentUser && state.currentUser.role === 'admin') {
+        renderClassesTable();
+        populateStudentClassesSelect();
+        renderUserTable();
+      }
+    } else {
+      syncAcademicDataToCloud();
+    }
+  });
+
+  db.collection("radx_config").doc("schedule").onSnapshot(doc => {
+    if (doc.exists && doc.data().items) {
+      state.schedule = doc.data().items;
+      if (state.currentUser && state.currentUser.role === 'student') renderStudentCases();
+      if (state.currentUser && state.currentUser.role === 'teacher') renderTeacherModuleControl();
+    } else {
+      db.collection("radx_config").doc("schedule").set({ items: state.schedule });
+    }
+  });
+
+  db.collection("radx_submissions").onSnapshot(snapshot => {
+    const list = [];
+    snapshot.forEach(doc => list.push({ ...doc.data(), submissionId: doc.id }));
+    state.submissions = list;
+
+    state.students.forEach(st => {
+      st.completedFases = state.submissions.filter(sub => sub.studentId === st.id).map(sub => sub.faseId);
+    });
+
+    if (state.currentUser && state.currentUser.role === 'teacher') renderTeacherSubmissions();
+    if (state.currentUser && state.currentUser.role === 'student') renderStudentCases();
+  });
+}
+listenCloudUpdates();
+
+function syncAcademicDataToCloud() {
+  if (!db) return;
+  db.collection("radx_config").doc("academic_data").set({
+    students: state.students,
+    classes: state.classes,
+    teachers: state.teachers,
+    adminPassword: state.adminPassword
+  }).catch(console.error);
+}
+
+/* =======================================================
+   AUTENTICAÇÃO
+======================================================= */
+function toggleLoginInputs() {
+  const role = document.getElementById("loginRole").value;
+  const userLabel = document.getElementById("loginUserLabel");
+  const userInput = document.getElementById("loginUsername");
+  const passField = document.getElementById("loginPasswordField");
+
+  if (role === 'admin') {
+    userLabel.textContent = "Usuário do Administrador";
+    userInput.value = "admin";
+    passField.classList.remove("hidden");
+  } else if (role === 'teacher') {
+    userLabel.textContent = "Matrícula do Professor";
+    userInput.value = "prof10";
+    passField.classList.add("hidden");
+  } else {
+    userLabel.textContent = "Matrícula do Aluno";
+    userInput.value = "aluno101";
+    passField.classList.add("hidden");
+  }
+}
+
+function handleLogin() {
+  const role = document.getElementById("loginRole").value;
+  const user = document.getElementById("loginUsername").value.trim();
+  const pass = document.getElementById("loginPassword").value;
+
+  if (role === 'admin') {
+    if (user.toLowerCase() !== 'admin') return alert("Usuário de admin incorreto! (Use: admin)");
+    if (pass !== state.adminPassword) return alert("Senha de administrador incorreta!");
+    state.currentUser = { role: 'admin', name: 'Administrador Geral' };
+    initAdminPanel();
+  } else if (role === 'teacher') {
+    const prof = state.teachers.find(t => t.id === user);
+    if (!prof) return alert("Professor não encontrado!");
+    state.currentUser = { ...prof, role: 'teacher' };
+    initTeacherPanel();
+  } else if (role === 'student') {
+    const al = state.students.find(s => s.id === user);
+    if (!al) return alert("Matrícula de aluno não encontrada!");
+    state.currentUser = { ...al, role: 'student' };
+    initStudentPanel();
+  }
+
+  document.getElementById("loginScreen").classList.add("hidden");
+  document.getElementById("headerUser").classList.remove("hidden");
+  document.getElementById("logoutBtn").classList.remove("hidden");
+  document.getElementById("headerUser").textContent = `${state.currentUser.name} (${role.toUpperCase()})`;
+}
+
+function logout() {
+  state.currentUser = null;
+  document.querySelectorAll('.container > section').forEach(s => s.classList.add('hidden'));
+  document.getElementById("loginScreen").classList.remove("hidden");
+  document.getElementById("headerUser").classList.add("hidden");
+  document.getElementById("logoutBtn").classList.add("hidden");
+  document.getElementById("loginPassword").value = "";
+}
+
+/* =======================================================
+   ADMINISTRADOR
+======================================================= */
+function initAdminPanel() {
+  document.getElementById("adminScreen").classList.remove("hidden");
+  renderClassesTable();
+  populateStudentClassesSelect();
+  renderUserTable();
+}
+
+function switchAdminTab(tabId, btn) {
+  document.querySelectorAll('.admin-tab').forEach(el => el.classList.add('hidden'));
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+  document.getElementById(tabId).classList.remove('hidden');
+  btn.classList.add('active');
+  if(tabId === 'list-users') renderUserTable();
+  if(tabId === 'cad-classes') renderClassesTable();
+  if(tabId === 'cad-student') populateStudentClassesSelect();
+}
+
+function changeAdminPassword() {
+  const cur = document.getElementById("currentAdminPass").value;
+  const nPass = document.getElementById("newAdminPass").value;
+  const conf = document.getElementById("confirmNewAdminPass").value;
+
+  if (cur !== state.adminPassword) return alert("A senha atual está incorreta!");
+  if (!nPass || nPass.length < 4) return alert("A nova senha deve ter no mínimo 4 caracteres!");
+  if (nPass !== conf) return alert("A confirmação da nova senha não confere!");
+
+  state.adminPassword = nPass;
+  syncAcademicDataToCloud();
+  alert("Senha atualizada no Firestore!");
+  document.getElementById("currentAdminPass").value = "";
+  document.getElementById("newAdminPass").value = "";
+  document.getElementById("confirmNewAdminPass").value = "";
+}
+
+function renderClassesTable() {
+  const tbody = document.getElementById("classesTableBody");
+  tbody.innerHTML = "";
+  state.classes.forEach(c => {
+    const totalStudents = state.students.filter(s => s.class === c.code).length;
+    tbody.innerHTML += `
+      <tr>
+        <td><b>${c.code}</b></td>
+        <td>${c.name}</td>
+        <td>${c.shift}</td>
+        <td>${totalStudents} aluno(s)</td>
+        <td>
+          <button class="sm secondary" onclick="editClass('${c.code}')">Editar</button>
+          <button class="sm danger" onclick="deleteClass('${c.code}')">Excluir</button>
+        </td>
+      </tr>
+    `;
+  });
+}
+
+function saveClass() {
+  const code = document.getElementById("classCode").value.trim().toUpperCase();
+  const name = document.getElementById("className").value.trim();
+  const shift = document.getElementById("classShift").value;
+  const editingId = document.getElementById("editingClassId").value;
+
+  if(!code || !name) return alert("Preencha Código e Nome da Turma!");
+
+  if(editingId) {
+    const idx = state.classes.findIndex(c => c.code === editingId);
+    if(idx !== -1) {
+      state.classes[idx] = { code, name, shift };
+      alert("Turma atualizada!");
+    }
+  } else {
+    if(state.classes.some(c => c.code === code)) return alert("Código de turma já cadastrado!");
+    state.classes.push({ code, name, shift });
+    alert("Turma cadastrada com sucesso!");
+  }
+
+  cancelClassEdit();
+  syncAcademicDataToCloud();
+  renderClassesTable();
+  populateStudentClassesSelect();
+}
+
+function editClass(code) {
+  const c = state.classes.find(item => item.code === code);
+  if(!c) return;
+  document.getElementById("classFormTitle").textContent = `Editar Turma: ${c.code}`;
+  document.getElementById("editingClassId").value = c.code;
+  document.getElementById("classCode").value = c.code;
+  document.getElementById("className").value = c.name;
+  document.getElementById("classShift").value = c.shift;
+  document.getElementById("saveClassBtn").textContent = "Salvar Alterações";
+  document.getElementById("cancelClassEditBtn").classList.remove("hidden");
+}
+
+function cancelClassEdit() {
+  document.getElementById("classFormTitle").textContent = "Cadastrar Nova Turma";
+  document.getElementById("editingClassId").value = "";
+  document.getElementById("classCode").value = "";
+  document.getElementById("className").value = "";
+  document.getElementById("classShift").value = "Manhã";
+  document.getElementById("saveClassBtn").textContent = "Salvar Turma";
+  document.getElementById("cancelClassEditBtn").classList.add("hidden");
+}
+
+function deleteClass(code) {
+  if(!confirm(`Deseja excluir a turma ${code}?`)) return;
+  state.classes = state.classes.filter(c => c.code !== code);
+  syncAcademicDataToCloud();
+  renderClassesTable();
+  populateStudentClassesSelect();
+}
+
+function populateStudentClassesSelect() {
+  const selectClass = document.getElementById("studentRegClass");
+  selectClass.innerHTML = "";
+
+  if (state.classes.length === 0) {
+    selectClass.innerHTML = "<option value=''>Nenhuma turma cadastrada</option>";
+    return;
+  }
+
+  state.classes.forEach(c => {
+    const opt = document.createElement("option");
+    opt.value = c.code;
+    opt.textContent = `${c.code} - ${c.name} (${c.shift})`;
+    selectClass.appendChild(opt);
+  });
+}
+
+function saveStudent() {
+  const name = document.getElementById("studentRegName").value.trim();
+  const id = document.getElementById("studentRegId").value.trim();
+  const cClass = document.getElementById("studentRegClass").value;
+
+  if(!name || !id) return alert("Preencha nome e matrícula!");
+  if(!cClass) return alert("Selecione uma turma válida!");
+  if(state.students.some(s => s.id === id)) return alert("Já existe aluno com esta matrícula!");
+
+  state.students.push({ id, name, class: cClass, completedFases: [] });
+  syncAcademicDataToCloud();
+  alert("Aluno cadastrado com sucesso!");
+  document.getElementById("studentRegName").value = "";
+  document.getElementById("studentRegId").value = "";
+  renderUserTable();
+}
+
+function saveTeacher() {
+  const name = document.getElementById("teacherName").value.trim();
+  const id = document.getElementById("teacherId").value.trim();
+
+  if(!name || !id) return alert("Preencha nome e matrícula do professor!");
+  if(state.teachers.some(t => t.id === id)) return alert("Matrícula docente já cadastrada!");
+
+  state.teachers.push({ id, name });
+  syncAcademicDataToCloud();
+  alert("Professor cadastrado com sucesso!");
+  document.getElementById("teacherName").value = "";
+  document.getElementById("teacherId").value = "";
+  renderUserTable();
+}
+
+function renderUserTable() {
+  const tbody = document.getElementById("userTableBody");
+  tbody.innerHTML = "";
+  state.teachers.forEach(t => {
+    tbody.innerHTML += `<tr><td><b style="color:var(--accent)">Docente</b></td><td>${t.name}</td><td>${t.id}</td><td>Corpo Docente</td></tr>`;
+  });
+  state.students.forEach(s => {
+    const tObj = state.classes.find(c => c.code === s.class);
+    tbody.innerHTML += `<tr><td><b style="color:var(--primary)">Discente</b></td><td>${s.name}</td><td>${s.id}</td><td>${tObj ? tObj.name + ' (' + tObj.code + ')' : s.class}</td></tr>`;
+  });
+}
+
+/* =======================================================
+   PROFESSOR
+======================================================= */
+function initTeacherPanel() {
+  document.getElementById("teacherScreen").classList.remove("hidden");
+  renderTeacherModuleControl();
+  populateTeacherClassFilter();
+  renderTeacherSubmissions();
+
+  document.getElementById("totalStudentsCount").textContent = state.students.length;
+  document.getElementById("totalReportsCount").textContent = state.submissions.length;
+
+  const sBody = document.getElementById("studentProgressBody");
+  sBody.innerHTML = "";
+  state.students.forEach(s => {
+    const turmaInfo = state.classes.find(c => c.code === s.class)?.name || s.class;
+    const studentSubs = state.submissions.filter(sub => sub.studentId === s.id && sub.grade !== null && sub.grade !== undefined);
+    const avgGrade = studentSubs.length ? (studentSubs.reduce((acc, c) => acc + c.grade, 0) / studentSubs.length).toFixed(1) : "-";
+
+    sBody.innerHTML += `
+      <tr>
+        <td>${s.id}</td>
+        <td><b>${s.name}</b></td>
+        <td>${turmaInfo}</td>
+        <td>${s.completedFases.length} prática(s)</td>
+        <td><b>${avgGrade}</b></td>
+        <td><span style="color:${s.completedFases.length >= 3 ? 'var(--success)' : 'var(--warning)'}; font-weight:bold;">${s.completedFases.length >= 3 ? 'Avançado' : 'Em Andamento'}</span></td>
+      </tr>`;
+  });
+}
+
+function switchTeacherTab(tabId, btn) {
+  document.querySelectorAll('.teacher-tab').forEach(el => el.classList.add('hidden'));
+  document.querySelectorAll('#teacherScreen .tab-btn').forEach(b => b.classList.remove('active'));
+  document.getElementById(tabId).classList.remove('hidden');
+  btn.classList.add('active');
+  if(tabId === 't-submissions') renderTeacherSubmissions();
+}
+
+function renderTeacherModuleControl() {
+  const tbody = document.getElementById("teacherModuleControlBody");
+  tbody.innerHTML = "";
+
+  state.schedule.forEach(m => {
+    const isUnlocked = m.unlockedByTeacher;
+    tbody.innerHTML += `
+      <tr>
+        <td><b>Prática #${m.id}</b></td>
+        <td><b>${m.title}</b><br><small style="color:#627d98;">${m.desc}</small></td>
+        <td>
+          <span style="padding:4px 8px; border-radius:6px; font-weight:bold; font-size:0.8rem; background:${isUnlocked ? '#dcfce7' : '#fee2e2'}; color:${isUnlocked ? '#15803d' : '#991b1b'};">
+            ${isUnlocked ? '🔓 Liberada' : '🔒 Bloqueada'}
+          </span>
+        </td>
+        <td>
+          <button class="sm ${isUnlocked ? 'danger' : 'success'}" onclick="toggleModuleLock(${m.id})">
+            ${isUnlocked ? 'Bloquear Prática' : 'Liberar para Turmas'}
+          </button>
+        </td>
+      </tr>
+    `;
+  });
+}
+
+function toggleModuleLock(moduleId) {
+  const mod = state.schedule.find(m => m.id === moduleId);
+  if(!mod) return;
+  mod.unlockedByTeacher = !mod.unlockedByTeacher;
+
+  if (db) {
+    db.collection("radx_config").doc("schedule").set({ items: state.schedule }).catch(console.error);
+  }
+  renderTeacherModuleControl();
+}
+
+function populateTeacherClassFilter() {
+  const sel = document.getElementById("teacherClassFilter");
+  sel.innerHTML = '<option value="ALL">Todas as Turmas</option>';
+  state.classes.forEach(c => {
+    sel.innerHTML += `<option value="${c.code}">${c.code} - ${c.name}</option>`;
+  });
+}
+
+function renderTeacherSubmissions() {
+  const tbody = document.getElementById("submissionsTableBody");
+  tbody.innerHTML = "";
+  const filterClass = document.getElementById("teacherClassFilter").value;
+
+  let list = state.submissions;
+  if(filterClass !== "ALL") {
+    list = list.filter(sub => sub.studentClass === filterClass);
+  }
+
+  const pending = list.filter(sub => sub.status === 'pendente').length;
+  document.getElementById("pendingReportsCount").textContent = pending;
+
+  if (list.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="7" style="text-align:center; color:#627d98;">Nenhum laudo enviado pelos alunos até o momento.</td></tr>`;
+    return;
+  }
+
+  list.forEach(sub => {
+    const isPending = sub.status === 'pendente';
+    tbody.innerHTML += `
+      <tr>
+        <td>${sub.date || 'Hoje'}</td>
+        <td><b>${sub.studentName}</b> (${sub.studentId})</td>
+        <td>${sub.studentClass}</td>
+        <td><b>${sub.faseTitle}</b></td>
+        <td>
+          <span style="padding:4px 8px; border-radius:6px; font-weight:bold; font-size:0.75rem; background:${isPending ? '#fef3c7' : '#dcfce7'}; color:${isPending ? '#92400e' : '#15803d'};">
+            ${isPending ? '⏳ Pendente' : '✓ Corrigido'}
+          </span>
+        </td>
+        <td><b>${sub.grade !== null && sub.grade !== undefined ? sub.grade + ' / 10' : '-'}</b></td>
+        <td>
+          <button class="sm ${isPending ? 'primary' : 'secondary'}" onclick="openEvaluationModal('${sub.submissionId}')">
+            ${isPending ? 'Avaliar' : 'Rever'}
+          </button>
+        </td>
+      </tr>
+    `;
+  });
+}
+
+let activeEvaluatingSubmission = null;
+
+function openEvaluationModal(subId) {
+  const sub = state.submissions.find(s => s.submissionId === subId);
+  if (!sub) return;
+  activeEvaluatingSubmission = sub;
+
+  document.getElementById("teacherScreen").classList.add("hidden");
+  document.getElementById("evalModalScreen").classList.remove("hidden");
+
+  document.getElementById("evalStudentName").textContent = `${sub.studentName} (${sub.studentId})`;
+  document.getElementById("evalStudentClass").textContent = sub.studentClass;
+  document.getElementById("evalModuleName").textContent = sub.faseTitle;
+
+  const p = sub.protocol || {};
+  document.getElementById("evalProtocolDetails").innerHTML = `
+    • <b>Incidências:</b> ${p.incidences || 'Não informado'}<br>
+    • <b>DFOFI:</b> ${p.dfofi || 'Não informado'}<br>
+    • <b>Bucky / Grade:</b> ${p.bucky || 'Não informado'}<br>
+    • <b>Fatores (kV/mAs):</b> ${p.factors || 'Não informado'}<br>
+    • <b>Queixa / Anamnese:</b> ${sub.anamnesis || 'Não informada'}
+  `;
+
+  document.getElementById("evalReportText").textContent = `"${sub.reportText || 'Nenhum laudo digitado'}"`;
+
+  const imgElem = document.getElementById("evalRadImg");
+  const marker = document.getElementById("evalMarker");
+  const sideMarker = document.getElementById("evalSideMarker");
+  imgElem.src = sub.imageUrl || "./imagens/dedos.jpeg";
+
+  if (sub.markerCoords) {
+    marker.style.left = `${sub.markerCoords.xPercent}%`;
+    marker.style.top = `${sub.markerCoords.yPercent}%`;
+    marker.classList.remove("hidden");
+  } else {
+    marker.classList.add("hidden");
+  }
+
+  if (sub.sideMarkerCoords) {
+    sideMarker.style.left = `${sub.sideMarkerCoords.xPercent}%`;
+    sideMarker.style.top = `${sub.sideMarkerCoords.yPercent}%`;
+    sideMarker.textContent = sub.sideMarkerCoords.side || "D";
+    sideMarker.classList.remove("hidden");
+  } else {
+    sideMarker.classList.add("hidden");
+  }
+
+  document.getElementById("evalGradeInput").value = sub.grade !== null && sub.grade !== undefined ? sub.grade : "";
+  document.getElementById("evalFeedbackInput").value = sub.feedback || "";
+}
+
+function closeEvalModal() {
+  document.getElementById("evalModalScreen").classList.add("hidden");
+  document.getElementById("teacherScreen").classList.remove("hidden");
+}
+
+function saveEvaluation() {
+  const grade = parseFloat(document.getElementById("evalGradeInput").value);
+  const fb = document.getElementById("evalFeedbackInput").value.trim();
+
+  if (isNaN(grade) || grade < 0 || grade > 10) {
+    return alert("Insira uma nota prática válida entre 0 e 10!");
+  }
+
+  activeEvaluatingSubmission.grade = grade;
+  activeEvaluatingSubmission.feedback = fb;
+  activeEvaluatingSubmission.status = 'corrigido';
+
+  if (db && activeEvaluatingSubmission.submissionId) {
+    db.collection("radx_submissions").doc(activeEvaluatingSubmission.submissionId).update({
+      grade: grade,
+      feedback: fb,
+      status: 'corrigido'
+    }).catch(console.error);
+  }
+
+  alert("Avaliação gravada com sucesso!");
+  closeEvalModal();
+  renderTeacherSubmissions();
+}
+
+function exportGradesToCSV() {
+  let csvContent = "data:text/csv;charset=utf-8,";
+  csvContent += "Matricula;Aluno;Turma;Praticas Concluidas;Laudos Enviados;Media Pratica\n";
+
+  state.students.forEach(st => {
+    const studentSubs = state.submissions.filter(sub => sub.studentId === st.id && sub.grade !== null && sub.grade !== undefined);
+    const avgGrade = studentSubs.length ? (studentSubs.reduce((acc, c) => acc + c.grade, 0) / studentSubs.length).toFixed(1) : "Sem nota";
+    csvContent += `${st.id};${st.name};${st.class};${st.completedFases.length};${studentSubs.length};${avgGrade}\n`;
+  });
+
+  const encodedUri = encodeURI(csvContent);
+  const link = document.createElement("a");
+  link.setAttribute("href", encodedUri);
+  link.setAttribute("download", `Caderneta_RadX.csv`);
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+}
+
+/* =======================================================
+   ALUNO
+======================================================= */
+function initStudentPanel() {
+  document.getElementById("studentScreen").classList.remove("hidden");
+  renderStudentCases();
+}
+
+function renderStudentCases() {
+  const container = document.getElementById("timelineGrid");
+  container.innerHTML = "";
+
+  state.schedule.forEach(item => {
+    const isUnlocked = item.unlockedByTeacher === true;
+    const isCompleted = state.currentUser.completedFases.includes(item.id);
+    const userSub = state.submissions.find(s => s.studentId === state.currentUser.id && s.faseId === item.id);
+
+    let statusClass = "locked";
+    let statusText = "🔒 Aguardando Professor";
+    let reportStatusBadge = "";
+
+    if (userSub) {
+      if (userSub.status === 'corrigido') {
+        reportStatusBadge = `<div style="margin-top:8px; background:#dcfce7; border:1px solid #86efac; border-radius:6px; padding:6px; font-size:0.75rem; color:#166534;">
+          <b>✓ Laudo Avaliado!</b> Nota: <b>${userSub.grade}/10</b><br>
+          <i>Feedback: "${userSub.feedback || 'Bom trabalho!'}"</i>
+        </div>`;
+      } else {
+        reportStatusBadge = `<div style="margin-top:8px; background:#fef3c7; border:1px solid #fde047; border-radius:6px; padding:6px; font-size:0.75rem; color:#854d0e;">
+          ⏳ Laudo enviado. Aguardando avaliação.
+        </div>`;
+      }
+    }
+
+    if (isCompleted) {
+      statusClass = "completed";
+      statusText = "✓ Prática Realizada";
+    } else if (isUnlocked) {
+      statusClass = "open";
+      statusText = "🔓 Prática Liberada";
+    }
+
+    const card = document.createElement("div");
+    card.className = `schedule-item ${isCompleted ? 'done' : isUnlocked ? 'unlocked' : ''}`;
+    card.innerHTML = `
+      <span class="status ${statusClass}">${statusText}</span>
+      <h3 style="margin-bottom:6px;">${item.title}</h3>
+      <p style="font-size:0.85rem; color:#486581; min-height:40px;">${item.desc}</p>
+      <div style="font-size:0.75rem; color:#0c5460; font-weight:bold; margin-bottom:10px;">📋 Ficha de Anamnese → Estação Radiológica</div>
+      ${reportStatusBadge}
+      <button style="width:100%; margin-top:10px;" 
+        ${!isUnlocked ? 'disabled style="background:#cbd5e1;cursor:not-allowed;"' : ''}
+        onclick="openDirectPatientIntake(${item.id})">
+        ${!isUnlocked ? 'Aguardando Liberação' : isCompleted ? 'Refazer Prática' : 'Iniciar Atendimento'}
+      </button>
+    `;
+    container.appendChild(card);
+  });
+}
+
+function openDirectPatientIntake(faseId) {
+  const faseData = state.schedule.find(s => s.id === faseId);
+  state.currentPracticeCase = faseData;
+
+  const pt = faseData.patient || {
+    name: "Paciente Padrão",
+    record: `PR-2026-${faseData.id}01`,
+    age: "30 anos",
+    sex: "M",
+    region: faseData.title,
+    request: `Avaliação radiográfica para a estrutura de ${faseData.title}.`,
+    images: [{ label: "Incidência Padrão", url: `./imagens/${faseData.title.toLowerCase()}.jpg` }]
+  };
+
+  document.getElementById("studentScreen").classList.add("hidden");
+  document.getElementById("patientRegScreen").classList.remove("hidden");
+
+  document.getElementById("regModTitle").textContent = faseData.title;
+  document.getElementById("regStudentName").textContent = state.currentUser.name;
+
+  document.getElementById("reqDescription").textContent = pt.request;
+  document.getElementById("patientNameInput").value = pt.name;
+  document.getElementById("patientRecordInput").value = pt.record;
+  document.getElementById("patientAgeInput").value = pt.age;
+  document.getElementById("patientSexInput").value = pt.sex;
+  document.getElementById("patientRegionInput").value = pt.region;
+  document.getElementById("patientAnamnesisInput").value = "Paciente cooperativo para realização do exame e posicionamento.";
+
+  document.getElementById("techIncidences").value = "";
+  document.getElementById("techDfofi").value = "100 cm";
+  document.getElementById("techBucky").value = "Mesa fora de Bucky (sem grade)";
+  document.getElementById("techFactors").value = "";
+}
+
+function exitPatientScreen() {
+  document.getElementById("patientRegScreen").classList.add("hidden");
+  initStudentPanel();
+}
+
+function confirmPatientAndOpenStation() {
+  const age = document.getElementById("patientAgeInput").value.trim();
+  const techInc = document.getElementById("techIncidences").value.trim();
+  const techFact = document.getElementById("techFactors").value.trim();
+
+  if(!age) return alert("Confirme a idade do paciente!");
+  if(!techInc || !techFact) return alert("Preencha as Incidências e Fatores de Exposição (kV/mAs) planejados!");
+
+  state.currentPractice.protocol = {
+    incidences: techInc,
+    dfofi: document.getElementById("techDfofi").value,
+    bucky: document.getElementById("techBucky").value,
+    factors: techFact
+  };
+  state.currentPractice.anamnesis = document.getElementById("patientAnamnesisInput").value;
+
+  document.getElementById("patientRegScreen").classList.add("hidden");
+  openRadiologyStation();
+}
+
+function openRadiologyStation() {
+  document.getElementById("stationScreen").classList.remove("hidden");
+  document.getElementById("stationPlayer").textContent = state.currentUser.name;
+  document.getElementById("stationPatient").textContent = state.currentPracticeCase.patient ? state.currentPracticeCase.patient.name : "Paciente Padrão";
+  document.getElementById("stationFaseTitle").textContent = `Estudo: ${state.currentPracticeCase.title}`;
+  document.getElementById("stationReport").value = "";
+
+  state.activeImageIndex = 0;
+  state.currentPractice.markerCoords = null;
+  state.currentPractice.sideMarkerCoords = null;
+  document.getElementById("stationMarker").classList.add("hidden");
+  document.getElementById("stationSideMarker").classList.add("hidden");
+
+  setClickMode('lesion');
+  renderIncidenceSelectorTabs();
+  loadImageInStation();
+}
+
+function setClickMode(mode) {
+  state.clickMode = mode;
+  document.getElementById("btnToolSideD").classList.remove("active-mode");
+  document.getElementById("btnToolSideE").classList.remove("active-mode");
+  document.getElementById("btnToolLesion").classList.remove("active-mode");
+
+  if (mode === 'side-D') document.getElementById("btnToolSideD").classList.add("active-mode");
+  if (mode === 'side-E') document.getElementById("btnToolSideE").classList.add("active-mode");
+  if (mode === 'lesion') document.getElementById("btnToolLesion").classList.add("active-mode");
+}
+
+function renderIncidenceSelectorTabs() {
+  const bar = document.getElementById("incidenceSelectorBar");
+  bar.innerHTML = "<span style='color:#bcccdc; font-size:0.85rem; font-weight:bold; margin-right:4px;'>Incidências da Sala:</span>";
+
+  const pt = state.currentPracticeCase.patient;
+  if (!pt || !pt.images || pt.images.length === 0) {
+    bar.innerHTML += "<span class='badge'>Incidência Única</span>";
+    return;
+  }
+
+  pt.images.forEach((imgObj, idx) => {
+    const btn = document.createElement("button");
+    btn.className = `incidence-btn ${idx === state.activeImageIndex ? 'active' : ''}`;
+    btn.textContent = imgObj.label;
+    btn.onclick = () => switchIncidence(idx);
+    bar.appendChild(btn);
+  });
+}
+
+function switchIncidence(index) {
+  state.activeImageIndex = index;
+  renderIncidenceSelectorTabs();
+  loadImageInStation();
+}
+
+function loadImageInStation() {
+  const pt = state.currentPracticeCase ? state.currentPracticeCase.patient : null;
+  const imgElem = document.getElementById("radImage");
+
+  if (!pt || !pt.images || pt.images.length === 0) {
+    imgElem.src = "./imagens/dedos.jpeg";
+    return;
+  }
+
+  const selectedImage = pt.images[state.activeImageIndex] || pt.images[0];
+  let finalUrl = selectedImage.url;
+
+  if (!finalUrl.startsWith("./") && !finalUrl.startsWith("http")) {
+    finalUrl = "./" + finalUrl;
+  }
+
+  imgElem.onerror = function() {
+    this.onerror = null;
+    if (finalUrl.includes("/imagens/")) {
+      this.src = finalUrl.replace("/imagens/", "/Imagens/");
+    } else if (finalUrl.includes("/Imagens/")) {
+      this.src = finalUrl.replace("/Imagens/", "/imagens/");
+    }
+  };
+
+  imgElem.src = finalUrl;
+  resetViewer();
+}
+
+function handleImageClick(e) {
+  const viewport = document.getElementById("viewportArea");
+  const rect = viewport.getBoundingClientRect();
+  const x = e.clientX - rect.left;
+  const y = e.clientY - rect.top;
+
+  const xPercent = ((x / rect.width) * 100).toFixed(1);
+  const yPercent = ((y / rect.height) * 100).toFixed(1);
+
+  if (state.clickMode === 'lesion') {
+    state.currentPractice.markerCoords = { xPercent, yPercent };
+    const marker = document.getElementById("stationMarker");
+    marker.style.left = `${xPercent}%`;
+    marker.style.top = `${yPercent}%`;
+    marker.classList.remove("hidden");
+  } else if (state.clickMode === 'side-D' || state.clickMode === 'side-E') {
+    const side = state.clickMode === 'side-D' ? 'D' : 'E';
+    state.currentPractice.sideMarkerCoords = { xPercent, yPercent, side };
+    const sideMarker = document.getElementById("stationSideMarker");
+    sideMarker.textContent = side;
+    sideMarker.style.left = `${xPercent}%`;
+    sideMarker.style.top = `${yPercent}%`;
+    sideMarker.classList.remove("hidden");
+  }
+}
+
+function clearAllMarkers() {
+  state.currentPractice.markerCoords = null;
+  state.currentPractice.sideMarkerCoords = null;
+  document.getElementById("stationMarker").classList.add("hidden");
+  document.getElementById("stationSideMarker").classList.add("hidden");
+}
+
+function applyViewerFilters() {
+  const b = document.getElementById("vBrightness").value;
+  const c = document.getElementById("vContrast").value;
+  state.viewer.brightness = b;
+  state.viewer.contrast = c;
+  updateImageTransform();
+}
+function toggleNegative() {
+  state.viewer.negative = !state.viewer.negative;
+  updateImageTransform();
+}
+function adjustZoom(delta) {
+  state.viewer.zoom = Math.max(0.6, Math.min(3.5, state.viewer.zoom + delta));
+  updateImageTransform();
+}
+function rotateImage() {
+  state.viewer.rotation = (state.viewer.rotation + 90) % 360;
+  updateImageTransform();
+}
+function resetViewer() {
+  state.viewer = { brightness: 100, contrast: 100, negative: false, zoom: 1, rotation: 0 };
+  document.getElementById("vBrightness").value = 100;
+  document.getElementById("vContrast").value = 100;
+  updateImageTransform();
+}
+function updateImageTransform() {
+  const img = document.getElementById("radImage");
+  const inv = state.viewer.negative ? 1 : 0;
+  img.style.filter = `brightness(${state.viewer.brightness}%) contrast(${state.viewer.contrast}%) invert(${inv})`;
+  img.style.transform = `scale(${state.viewer.zoom}) rotate(${state.viewer.rotation}deg)`;
+}
+
+function finishAndSubmitReport() {
+  const report = document.getElementById("stationReport").value.trim();
+  if(!report) {
+    return alert("Por favor, formule e digite seu laudo técnico antes de enviar!");
+  }
+
+  if(!state.currentPractice.sideMarkerCoords) {
+    if(!confirm("Você não posicionou a marcação anatômica de lado (D ou E) na imagem. Deseja enviar o exame mesmo assim?")) {
+      return;
+    }
+  }
+
+  const subData = {
+    studentId: state.currentUser.id,
+    studentName: state.currentUser.name,
+    studentClass: state.currentUser.class,
+    faseId: state.currentPracticeCase.id,
+    faseTitle: state.currentPracticeCase.title,
+    date: new Date().toLocaleDateString('pt-BR'),
+    protocol: state.currentPractice.protocol,
+    anamnesis: state.currentPractice.anamnesis,
+    reportText: report,
+    imageUrl: document.getElementById("radImage").src,
+    markerCoords: state.currentPractice.markerCoords,
+    sideMarkerCoords: state.currentPractice.sideMarkerCoords,
+    status: 'pendente',
+    grade: null,
+    feedback: ""
+  };
+
+  if (db) {
+    db.collection("radx_submissions").add(subData)
+      .then(() => {
+        alert("✓ Laudo técnico, protocolo e marcações gravados no Firestore com sucesso!");
+        document.getElementById("stationScreen").classList.add("hidden");
+        initStudentPanel();
+      })
+      .catch(err => {
+        console.error(err);
+        alert("Erro ao enviar laudo para o Firebase. Verifique a conexão.");
+      });
+  } else {
+    state.submissions.unshift({ ...subData, submissionId: `sub_${Date.now()}` });
+    alert("✓ Laudo gravado com sucesso!");
+    document.getElementById("stationScreen").classList.add("hidden");
+    initStudentPanel();
+  }
+}
+</script>
+</body>
+</html>
