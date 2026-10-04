@@ -311,22 +311,16 @@
     
     <div id="loginUserField">
       <label id="loginUserLabel">Usuário do Administrador</label>
-      <input type="text" id="loginUsername" value="admin" placeholder="Informe sua credencial">
+      <input type="text" id="loginUsername" placeholder="Informe sua credencial" autocomplete="username">
     </div>
 
     <div id="loginPasswordField">
       <label>Senha de Administrador</label>
-      <input type="password" id="loginPassword" placeholder="Digite sua senha">
+      <input type="password" id="loginPassword" placeholder="Digite sua senha" autocomplete="current-password">
     </div>
 
     <button style="width: 100%; margin-top:10px;" onclick="handleLogin()">Entrar no Sistema</button>
     
-    <div style="background:#f8fafc; border:1px solid #e2e8f0; border-radius:10px; padding:12px; margin-top:20px; font-size:0.8rem; color:#627d98;">
-      <b>Acessos Padrão:</b><br>
-      • <b>Admin:</b> admin (senha: <code>admin123</code>)<br>
-      • <b>Professor:</b> prof10<br>
-      • <b>Aluno:</b> aluno101
-    </div>
   </section>
 
   <!-- PAINEL ADMINISTRADOR -->
@@ -1108,18 +1102,17 @@ function toggleLoginInputs() {
   const userLabel = document.getElementById("loginUserLabel");
   const userInput = document.getElementById("loginUsername");
   const passField = document.getElementById("loginPasswordField");
+  userInput.value = "";
+  document.getElementById("loginPassword").value = "";
 
   if (role === 'admin') {
     userLabel.textContent = "Usuário do Administrador";
-    userInput.value = "admin";
     passField.classList.remove("hidden");
   } else if (role === 'teacher') {
     userLabel.textContent = "Matrícula do Professor";
-    userInput.value = "prof10";
     passField.classList.add("hidden");
   } else {
     userLabel.textContent = "Matrícula do Aluno";
-    userInput.value = "aluno101";
     passField.classList.add("hidden");
   }
 }
@@ -1130,7 +1123,7 @@ function handleLogin() {
   const pass = document.getElementById("loginPassword").value;
 
   if (role === 'admin') {
-    if (user.toLowerCase() !== 'admin') return alert("Usuário de admin incorreto! (Use: admin)");
+    if (user.toLowerCase() !== 'admin') return alert("Credenciais de administrador incorretas.");
     if (pass !== state.adminPassword) return alert("Senha de administrador incorreta!");
     state.currentUser = { role: 'admin', name: 'Administrador Geral' };
     initAdminPanel();
@@ -1159,6 +1152,7 @@ function logout() {
   document.getElementById("headerUser").classList.add("hidden");
   document.getElementById("logoutBtn").classList.add("hidden");
   document.getElementById("loginPassword").value = "";
+  document.getElementById("loginUsername").value = "";
 }
 
 /* =======================================================
@@ -1792,7 +1786,9 @@ function loadImageInStation() {
   imgElem.onerror = function() {
     this.onerror = () => {
       state.imageReady = false;
-      imageStatus.textContent = "Imagem indisponível. Solicite ao professor o arquivo desta incidência para continuar.";
+      imageStatus.textContent = state.currentPracticeCase?.id === 13
+        ? "As radiografias do módulo Neonatal serão disponibilizadas em breve. A prática estará pronta para uso quando as imagens forem adicionadas."
+        : "Imagem indisponível. Solicite ao professor o arquivo desta incidência para continuar.";
       imageStatus.classList.remove("hidden");
     };
     if (finalUrl.includes("/imagens/")) {

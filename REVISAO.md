@@ -14,6 +14,8 @@
 - Imagem indisponível é sinalizada e impede envio de exame sem imagem carregada.
 - Alteração de código da turma acompanha os alunos; exclusão de turma com alunos é bloqueada.
 - Protocolo, anamnese e feedback são escapados antes da inserção em HTML.
+- Quadro de acessos padrão retirado do login; campos de usuário não são preenchidos automaticamente e são limpos ao sair ou trocar de perfil.
+- Neonatal informa que as radiografias serão disponibilizadas em breve. Os nomes e o procedimento de inclusão estão em `imagens/README.md`.
 
 ## Validação
 
@@ -21,7 +23,7 @@ Execute `node tests/regression.cjs`. Verifica catálogo, compatibilização do N
 
 ## Pendências para produção
 
-1. Adicionar as radiografias autorizadas `imagens/neonatal_torax_abdomen.jpg` e `imagens/neonatal_perfil.jpg`. Estes arquivos não estão no repositório local. O módulo aparece no catálogo, mas o exame não pode ser enviado sem a imagem.
+1. Quando disponíveis, adicionar as radiografias autorizadas `imagens/neonatal_torax_abdomen.jpg` e `imagens/neonatal_perfil.jpg` e publicá-las junto com o site. O módulo já está preparado para recebê-las, sem alteração de código ou recriação do banco. Enquanto isso, informa a indisponibilidade e impede envio de exame sem imagem.
 2. As coleções `sga_config` e `sga_submissions` foram confirmadas no console. A configuração pública real do aplicativo SGA Web foi incorporada. Os arquivos `firebase.json` e `.firebaserc` foram preparados para o projeto correto. O Hosting ainda apresenta o assistente inicial, sem site publicado. As regras do Firestore ainda precisam ser verificadas.
 3. Implementar Firebase Authentication com identidade e perfil de professor validados por regras do Firestore. Atualmente o usuário escolhe o perfil e informa uma matrícula; as verificações JavaScript não garantem autorização no servidor. A senha do administrador fica no cliente e no documento acadêmico. Esse modelo exige substituição para uso com dados reais.
 4. Verificar os demais campos de cadastro renderizados em HTML e a exportação CSV para entradas não confiáveis. A proteção dos campos de laudo corrigida aqui não constitui uma auditoria completa de segurança.
