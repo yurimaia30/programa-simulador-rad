@@ -143,7 +143,6 @@
   th, td { padding: 12px; text-align: left; border-bottom: 1px solid #e2e8f0; font-size: 0.88rem; }
   th { background: #f1f5f9; color: var(--primary-dark); }
 
-  /* FICHA DO PACIENTE */
   .patient-card {
     background: #f0f4f8;
     border: 2px dashed #9fb3c8;
@@ -166,7 +165,6 @@
     margin-top: 15px;
   }
 
-  /* ESTAÇÃO RADIOLÓGICA */
   .viewer-container {
     background: #000000;
     border-radius: 12px;
@@ -229,7 +227,6 @@
     pointer-events: none;
   }
 
-  /* MARCADORES SOBRE A IMAGEM */
   .lesion-marker {
     position: absolute;
     width: 26px;
@@ -314,22 +311,16 @@
     
     <div id="loginUserField">
       <label id="loginUserLabel">Usuário do Administrador</label>
-      <input type="text" id="loginUsername" value="admin" placeholder="Informe sua credencial">
+      <input type="text" id="loginUsername" placeholder="Informe sua credencial" autocomplete="username">
     </div>
 
     <div id="loginPasswordField">
       <label>Senha de Administrador</label>
-      <input type="password" id="loginPassword" placeholder="Digite sua senha">
+      <input type="password" id="loginPassword" placeholder="Digite sua senha" autocomplete="current-password">
     </div>
 
     <button style="width: 100%; margin-top:10px;" onclick="handleLogin()">Entrar no Sistema</button>
     
-    <div style="background:#f8fafc; border:1px solid #e2e8f0; border-radius:10px; padding:12px; margin-top:20px; font-size:0.8rem; color:#627d98;">
-      <b>Acessos Padrão:</b><br>
-      • <b>Admin:</b> admin (senha: <code>admin123</code>)<br>
-      • <b>Professor:</b> prof10<br>
-      • <b>Aluno:</b> aluno101
-    </div>
   </section>
 
   <!-- PAINEL ADMINISTRADOR -->
@@ -688,6 +679,7 @@
 
       <div class="viewer-viewport" id="viewportArea" onclick="handleImageClick(event)" title="Clique para posicionar o marcador selecionado">
         <img id="radImage" src="" alt="Exame Radiográfico do Paciente">
+        <p id="imageStatus" role="status" style="color:white;padding:12px;">Carregando imagem…</p>
         <div id="stationMarker" class="lesion-marker hidden" title="Fratura/Lesão"></div>
         <div id="stationSideMarker" class="side-marker hidden" title="Lado Anatômico">D</div>
       </div>
@@ -717,25 +709,27 @@
    CONEXÃO COM O FIREBASE CLOUD FIRESTORE
 ======================================================= */
 const FIREBASE_CONFIG = {
-  apiKey: "SUA_API_KEY_AQUI",
-  authDomain: "seu-projeto.firebaseapp.com",
-  projectId: "seu-projeto-id",
-  storageBucket: "seu-projeto.appspot.com",
-  messagingSenderId: "000000000000",
-  appId: "1:000000000000:web:000000000000"
+  apiKey: "AIzaSyAxhdenTrKV5-HPV97ZHPxqheLNd3w6_Ek",
+  authDomain: "simulador-radiologia.firebaseapp.com",
+  projectId: "simulador-radiologia",
+  storageBucket: "simulador-radiologia.firebasestorage.app",
+  messagingSenderId: "642344515712",
+  appId: "1:642344515712:web:3994420e01b5fd2a188e65"
 };
 
 let db = null;
-if (window.firebase) {
+  if (window.firebase && /^AIza[\w-]{35}$/.test(FIREBASE_CONFIG.apiKey)) {
   try {
-    firebase.initializeApp(FIREBASE_CONFIG);
+    if (!firebase.apps.length) {
+      firebase.initializeApp(FIREBASE_CONFIG);
+    }
     db = firebase.firestore();
   } catch(e) {
     console.warn("Firebase não inicializado. Verifique suas credenciais.", e);
   }
 }
 
-// Catálogo nativo com suporte a Neonatologia e imagens locais
+// Catálogo com suporte completo a imagens locais e unidade neonatal
 const DEFAULT_SCHEDULE = [
   { 
     id: 1, 
@@ -926,7 +920,7 @@ const DEFAULT_SCHEDULE = [
       region: "Calcâneo e Retropé",
       request: "Queda de nível com impacto no calcanhar. Avaliação da tuberosidade do calcâneo.",
       images: [
-        { label: "Incidência 1: Estudo do Calcâneo", url: "./imagens/calcaneo.webp" }
+        { label: "Incidência 1: Estudo do Calcâneo", url: "./imagens/calcaneo.jpeg" }
       ]
     }
   },
@@ -950,8 +944,9 @@ const DEFAULT_SCHEDULE = [
   { 
     id: 13, 
     title: "Unidade Neonatal (UTI Neo)", 
-    desc: "Rotina de radiografia no leito/incubadora (Tórax e Abdómen do Recém-Nascido).", 
-    unlockedByTeacher: true,
+    desc: 'Brinde para os alunos: rotina de radiografia no leito/incubadora (Tórax e Abdómen do Recém-Nascido). Acesso mediante liberação do professor.',
+    unlockedByTeacher: false,
+    teacherReleaseRequired: true,
     patient: {
       name: "RN de Mariana Souza",
       record: "NEO-2026-0042",
@@ -967,7 +962,6 @@ const DEFAULT_SCHEDULE = [
   }
 ];
 
-// Estado da aplicação mantido em memória
 let state = {
   currentUser: null,
   adminPassword: 'admin123',
@@ -975,7 +969,7 @@ let state = {
     { code: "RAD-2026.1M", name: "Turma Manhã", shift: "Manhã" },
     { code: "RAD-2026.1N", name: "Turma Noite", shift: "Noite" }
   ],
-  schedule: DEFAULT_SCHEDULE,
+  schedule: JSON.parse(JSON.stringify(DEFAULT_SCHEDULE)),
   teachers: [
     { id: "prof10", name: "Prof. Yuri Maia" }
   ],
@@ -986,6 +980,7 @@ let state = {
   submissions: [],
   currentPracticeCase: null,
   activeImageIndex: 0,
+  imageReady: false,
   clickMode: 'lesion',
   currentPractice: {
     protocol: {},
@@ -1008,7 +1003,8 @@ let state = {
 function listenCloudUpdates() {
   if (!db) return;
 
-  db.collection("radx_config").doc("academic_data").onSnapshot(doc => {
+  // 1. Escuta Turmas, Docentes e Discentes
+  db.collection("sga_config").doc("academic_data").onSnapshot(doc => {
     if (doc.exists) {
       const data = doc.data();
       if (data.students) state.students = data.students;
@@ -1020,44 +1016,82 @@ function listenCloudUpdates() {
         populateStudentClassesSelect();
         renderUserTable();
       }
-    } else {
-      syncAcademicDataToCloud();
     }
-  });
+    updateCompletedPractices();
+  }, reportCloudError);
 
-  db.collection("radx_config").doc("schedule").onSnapshot(doc => {
+  // 2. Escuta o catálogo e preserva as liberações do professor.
+  db.collection("sga_config").doc("schedule").onSnapshot(doc => {
     if (doc.exists && doc.data().items) {
-      state.schedule = doc.data().items;
+      state.schedule = mergeSchedule(doc.data().items);
       if (state.currentUser && state.currentUser.role === 'student') renderStudentCases();
       if (state.currentUser && state.currentUser.role === 'teacher') renderTeacherModuleControl();
     } else {
-      db.collection("radx_config").doc("schedule").set({ items: state.schedule });
+      state.schedule = mergeSchedule([]);
     }
-  });
+  }, reportCloudError);
 
-  db.collection("radx_submissions").onSnapshot(snapshot => {
+  // 3. Escuta Laudos em Tempo Real
+  db.collection("sga_submissions").onSnapshot(snapshot => {
     const list = [];
     snapshot.forEach(doc => list.push({ ...doc.data(), submissionId: doc.id }));
     state.submissions = list;
 
-    state.students.forEach(st => {
-      st.completedFases = state.submissions.filter(sub => sub.studentId === st.id).map(sub => sub.faseId);
-    });
+    updateCompletedPractices();
 
     if (state.currentUser && state.currentUser.role === 'teacher') renderTeacherSubmissions();
     if (state.currentUser && state.currentUser.role === 'student') renderStudentCases();
-  });
+  }, reportCloudError);
 }
-listenCloudUpdates();
+
+// Atualiza o catálogo sem sobrescrever liberações de outros professores.
+function mergeSchedule(items) {
+  const cloudItems = Array.isArray(items) ? items : [];
+  return DEFAULT_SCHEDULE.map(item => {
+    const saved = cloudItems.find(m => Number(m.id) === item.id);
+    return {
+      ...JSON.parse(JSON.stringify(item)),
+      unlockedByTeacher: item.id === 13 && saved?.teacherReleaseRequired !== true
+        ? false : (saved ? saved.unlockedByTeacher === true : item.unlockedByTeacher)
+    };
+  }).concat(cloudItems.filter(m => !DEFAULT_SCHEDULE.some(item => item.id === Number(m.id))));
+}
 
 function syncAcademicDataToCloud() {
-  if (!db) return;
-  db.collection("radx_config").doc("academic_data").set({
+  if (!db) return Promise.resolve();
+  return db.collection("sga_config").doc("academic_data").set({
     students: state.students,
     classes: state.classes,
     teachers: state.teachers,
     adminPassword: state.adminPassword
-  }).catch(console.error);
+  }).catch(error => {
+    console.error(error);
+    alert("Não foi possível salvar os cadastros no Firebase. Verifique a conexão e as permissões.");
+  });
+}
+
+function updateCompletedPractices() {
+  state.students.forEach(student => {
+    student.completedFases = [...new Set(state.submissions.filter(sub => sub.studentId === student.id).map(sub => sub.faseId))];
+  });
+  if (state.currentUser?.role === 'student') {
+    state.currentUser.completedFases = state.students.find(s => s.id === state.currentUser.id)?.completedFases || [];
+  }
+}
+
+function escapeHtml(value) {
+  return String(value ?? '').replace(/[&<>"']/g, char => ({
+    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+  })[char]);
+}
+
+// URLs relativas funcionam tanto localmente quanto no site publicado.
+function resolveExamImage(value) {
+  const url = String(value || '');
+  const localImage = url.match(/(?:^|\/)imagens\/([^/?#]+)(?:[?#].*)?$/i);
+  if (localImage) return './imagens/' + localImage[1];
+  if (/^https:\/\//i.test(url)) return url;
+  return '';
 }
 
 /* =======================================================
@@ -1068,18 +1102,17 @@ function toggleLoginInputs() {
   const userLabel = document.getElementById("loginUserLabel");
   const userInput = document.getElementById("loginUsername");
   const passField = document.getElementById("loginPasswordField");
+  userInput.value = "";
+  document.getElementById("loginPassword").value = "";
 
   if (role === 'admin') {
     userLabel.textContent = "Usuário do Administrador";
-    userInput.value = "admin";
     passField.classList.remove("hidden");
   } else if (role === 'teacher') {
     userLabel.textContent = "Matrícula do Professor";
-    userInput.value = "prof10";
     passField.classList.add("hidden");
   } else {
     userLabel.textContent = "Matrícula do Aluno";
-    userInput.value = "aluno101";
     passField.classList.add("hidden");
   }
 }
@@ -1090,13 +1123,13 @@ function handleLogin() {
   const pass = document.getElementById("loginPassword").value;
 
   if (role === 'admin') {
-    if (user.toLowerCase() !== 'admin') return alert("Usuário de admin incorreto! (Use: admin)");
+    if (user.toLowerCase() !== 'admin') return alert("Credenciais de administrador incorretas.");
     if (pass !== state.adminPassword) return alert("Senha de administrador incorreta!");
     state.currentUser = { role: 'admin', name: 'Administrador Geral' };
     initAdminPanel();
   } else if (role === 'teacher') {
     const prof = state.teachers.find(t => t.id === user);
-    if (!prof) return alert("Professor não encontrado!");
+    if (!prof) return alert("Professor não encontrado no cadastro!");
     state.currentUser = { ...prof, role: 'teacher' };
     initTeacherPanel();
   } else if (role === 'student') {
@@ -1119,6 +1152,7 @@ function logout() {
   document.getElementById("headerUser").classList.add("hidden");
   document.getElementById("logoutBtn").classList.add("hidden");
   document.getElementById("loginPassword").value = "";
+  document.getElementById("loginUsername").value = "";
 }
 
 /* =======================================================
@@ -1185,11 +1219,16 @@ function saveClass() {
   const editingId = document.getElementById("editingClassId").value;
 
   if(!code || !name) return alert("Preencha Código e Nome da Turma!");
+  if (!/^[A-Z0-9._-]+$/.test(code)) return alert("Use apenas letras, números, ponto, hífen e sublinhado no código da turma.");
+  if(state.classes.some(c => c.code === code && c.code !== editingId)) return alert("Código de turma já cadastrado!");
 
   if(editingId) {
     const idx = state.classes.findIndex(c => c.code === editingId);
     if(idx !== -1) {
       state.classes[idx] = { code, name, shift };
+      state.students.forEach(student => {
+        if (student.class === editingId) student.class = code;
+      });
       alert("Turma atualizada!");
     }
   } else {
@@ -1227,6 +1266,7 @@ function cancelClassEdit() {
 }
 
 function deleteClass(code) {
+  if (state.students.some(s => s.class === code)) return alert("Transfira os alunos para outra turma antes de excluir esta turma.");
   if(!confirm(`Deseja excluir a turma ${code}?`)) return;
   state.classes = state.classes.filter(c => c.code !== code);
   syncAcademicDataToCloud();
@@ -1359,15 +1399,27 @@ function renderTeacherModuleControl() {
   });
 }
 
-function toggleModuleLock(moduleId) {
+async function toggleModuleLock(moduleId) {
+  if (state.currentUser?.role !== 'teacher') return;
   const mod = state.schedule.find(m => m.id === moduleId);
   if(!mod) return;
-  mod.unlockedByTeacher = !mod.unlockedByTeacher;
-
-  if (db) {
-    db.collection("radx_config").doc("schedule").set({ items: state.schedule }).catch(console.error);
+  const unlocked = !mod.unlockedByTeacher;
+  try {
+    if (db) {
+      const ref = db.collection("sga_config").doc("schedule");
+      await db.runTransaction(async transaction => {
+        const snapshot = await transaction.get(ref);
+        const items = mergeSchedule(snapshot.exists ? snapshot.data().items : []);
+        items.find(m => m.id === moduleId).unlockedByTeacher = unlocked;
+        transaction.set(ref, { items }, { merge: true });
+      });
+    }
+    mod.unlockedByTeacher = unlocked;
+    renderTeacherModuleControl();
+  } catch (error) {
+    console.error(error);
+    alert("A liberação não foi salva no Firebase. Tente novamente.");
   }
-  renderTeacherModuleControl();
 }
 
 function populateTeacherClassFilter() {
@@ -1436,11 +1488,11 @@ function openEvaluationModal(subId) {
 
   const p = sub.protocol || {};
   document.getElementById("evalProtocolDetails").innerHTML = `
-    • <b>Incidências:</b> ${p.incidences || 'Não informado'}<br>
-    • <b>DFOFI:</b> ${p.dfofi || 'Não informado'}<br>
-    • <b>Bucky / Grade:</b> ${p.bucky || 'Não informado'}<br>
-    • <b>Fatores (kV/mAs):</b> ${p.factors || 'Não informado'}<br>
-    • <b>Queixa / Anamnese:</b> ${sub.anamnesis || 'Não informada'}
+    • <b>Incidências:</b> ${escapeHtml(p.incidences || 'Não informado')}<br>
+    • <b>DFOFI:</b> ${escapeHtml(p.dfofi || 'Não informado')}<br>
+    • <b>Bucky / Grade:</b> ${escapeHtml(p.bucky || 'Não informado')}<br>
+    • <b>Fatores (kV/mAs):</b> ${escapeHtml(p.factors || 'Não informado')}<br>
+    • <b>Queixa / Anamnese:</b> ${escapeHtml(sub.anamnesis || 'Não informada')}
   `;
 
   document.getElementById("evalReportText").textContent = `"${sub.reportText || 'Nenhum laudo digitado'}"`;
@@ -1448,7 +1500,10 @@ function openEvaluationModal(subId) {
   const imgElem = document.getElementById("evalRadImg");
   const marker = document.getElementById("evalMarker");
   const sideMarker = document.getElementById("evalSideMarker");
-  imgElem.src = sub.imageUrl || "./imagens/dedos.jpeg";
+  const examImage = resolveExamImage(sub.imageUrl);
+  if (examImage) imgElem.src = examImage;
+  else imgElem.removeAttribute('src');
+  imgElem.alt = examImage ? "Exame enviado pelo aluno" : "Imagem do exame indisponível";
 
   if (sub.markerCoords) {
     marker.style.left = `${sub.markerCoords.xPercent}%`;
@@ -1476,7 +1531,8 @@ function closeEvalModal() {
   document.getElementById("teacherScreen").classList.remove("hidden");
 }
 
-function saveEvaluation() {
+async function saveEvaluation() {
+  if (state.currentUser?.role !== 'teacher' || !activeEvaluatingSubmission) return;
   const grade = parseFloat(document.getElementById("evalGradeInput").value);
   const fb = document.getElementById("evalFeedbackInput").value.trim();
 
@@ -1484,17 +1540,21 @@ function saveEvaluation() {
     return alert("Insira uma nota prática válida entre 0 e 10!");
   }
 
-  activeEvaluatingSubmission.grade = grade;
-  activeEvaluatingSubmission.feedback = fb;
-  activeEvaluatingSubmission.status = 'corrigido';
-
-  if (db && activeEvaluatingSubmission.submissionId) {
-    db.collection("radx_submissions").doc(activeEvaluatingSubmission.submissionId).update({
+  try {
+    if (db && activeEvaluatingSubmission.submissionId) {
+      await db.collection("sga_submissions").doc(activeEvaluatingSubmission.submissionId).update({
       grade: grade,
       feedback: fb,
       status: 'corrigido'
-    }).catch(console.error);
+      });
+    }
+  } catch (error) {
+    console.error(error);
+    return alert("A avaliação não foi salva no Firebase. Tente novamente.");
   }
+  activeEvaluatingSubmission.grade = grade;
+  activeEvaluatingSubmission.feedback = fb;
+  activeEvaluatingSubmission.status = 'corrigido';
 
   alert("Avaliação gravada com sucesso!");
   closeEvalModal();
@@ -1545,7 +1605,7 @@ function renderStudentCases() {
       if (userSub.status === 'corrigido') {
         reportStatusBadge = `<div style="margin-top:8px; background:#dcfce7; border:1px solid #86efac; border-radius:6px; padding:6px; font-size:0.75rem; color:#166534;">
           <b>✓ Laudo Avaliado!</b> Nota: <b>${userSub.grade}/10</b><br>
-          <i>Feedback: "${userSub.feedback || 'Bom trabalho!'}"</i>
+          <i>Feedback: "${escapeHtml(userSub.feedback || 'Bom trabalho!')}"</i>
         </div>`;
       } else {
         reportStatusBadge = `<div style="margin-top:8px; background:#fef3c7; border:1px solid #fde047; border-radius:6px; padding:6px; font-size:0.75rem; color:#854d0e;">
@@ -1570,8 +1630,8 @@ function renderStudentCases() {
       <p style="font-size:0.85rem; color:#486581; min-height:40px;">${item.desc}</p>
       <div style="font-size:0.75rem; color:#0c5460; font-weight:bold; margin-bottom:10px;">📋 Ficha de Anamnese → Estação Radiológica</div>
       ${reportStatusBadge}
-      <button style="width:100%; margin-top:10px;" 
-        ${!isUnlocked ? 'disabled style="background:#cbd5e1;cursor:not-allowed;"' : ''}
+      <button style="width:100%; margin-top:10px; ${!isUnlocked ? 'background:#cbd5e1;cursor:not-allowed;' : ''}"
+        ${!isUnlocked ? 'disabled' : ''}
         onclick="openDirectPatientIntake(${item.id})">
         ${!isUnlocked ? 'Aguardando Liberação' : isCompleted ? 'Refazer Prática' : 'Iniciar Atendimento'}
       </button>
@@ -1582,6 +1642,9 @@ function renderStudentCases() {
 
 function openDirectPatientIntake(faseId) {
   const faseData = state.schedule.find(s => s.id === faseId);
+  if (state.currentUser?.role !== 'student' || !faseData || faseData.unlockedByTeacher !== true) {
+    return alert("Esta prática aguarda liberação do professor.");
+  }
   state.currentPracticeCase = faseData;
 
   const pt = faseData.patient || {
@@ -1606,7 +1669,9 @@ function openDirectPatientIntake(faseId) {
   document.getElementById("patientAgeInput").value = pt.age;
   document.getElementById("patientSexInput").value = pt.sex;
   document.getElementById("patientRegionInput").value = pt.region;
-  document.getElementById("patientAnamnesisInput").value = "Paciente cooperativo para realização do exame e posicionamento.";
+  document.getElementById("patientAnamnesisInput").value = faseId === 13
+    ? "Recém-nascido em incubadora. Registrar as condições e os cuidados informados pela equipe assistencial."
+    : "Paciente cooperativo para realização do exame e posicionamento.";
 
   document.getElementById("techIncidences").value = "";
   document.getElementById("techDfofi").value = "100 cm";
@@ -1688,6 +1753,7 @@ function renderIncidenceSelectorTabs() {
 }
 
 function switchIncidence(index) {
+  clearAllMarkers();
   state.activeImageIndex = index;
   renderIncidenceSelectorTabs();
   loadImageInStation();
@@ -1696,6 +1762,14 @@ function switchIncidence(index) {
 function loadImageInStation() {
   const pt = state.currentPracticeCase ? state.currentPracticeCase.patient : null;
   const imgElem = document.getElementById("radImage");
+  state.imageReady = false;
+  const imageStatus = document.getElementById("imageStatus");
+  imageStatus.textContent = "Carregando imagem…";
+  imageStatus.classList.remove("hidden");
+  imgElem.onload = () => {
+    state.imageReady = true;
+    imageStatus.classList.add("hidden");
+  };
 
   if (!pt || !pt.images || pt.images.length === 0) {
     imgElem.src = "./imagens/dedos.jpeg";
@@ -1710,7 +1784,13 @@ function loadImageInStation() {
   }
 
   imgElem.onerror = function() {
-    this.onerror = null;
+    this.onerror = () => {
+      state.imageReady = false;
+      imageStatus.textContent = state.currentPracticeCase?.id === 13
+        ? "As radiografias do módulo Neonatal serão disponibilizadas em breve. A prática estará pronta para uso quando as imagens forem adicionadas."
+        : "Imagem indisponível. Solicite ao professor o arquivo desta incidência para continuar.";
+      imageStatus.classList.remove("hidden");
+    };
     if (finalUrl.includes("/imagens/")) {
       this.src = finalUrl.replace("/imagens/", "/Imagens/");
     } else if (finalUrl.includes("/Imagens/")) {
@@ -1787,14 +1867,21 @@ function updateImageTransform() {
   img.style.transform = `scale(${state.viewer.zoom}) rotate(${state.viewer.rotation}deg)`;
 }
 
-function finishAndSubmitReport() {
+/* =======================================================
+   ENVIO DO LAUDO AO PROFESSOR
+======================================================= */
+async function finishAndSubmitReport() {
+  if (!state.imageReady) return alert("Aguarde uma imagem válida antes de enviar o exame.");
+  if (state.currentUser?.role !== 'student' || !state.schedule.find(m => m.id === state.currentPracticeCase?.id)?.unlockedByTeacher) {
+    return alert("Esta prática aguarda liberação do professor.");
+  }
   const report = document.getElementById("stationReport").value.trim();
-  if(!report) {
+  if (!report) {
     return alert("Por favor, formule e digite seu laudo técnico antes de enviar!");
   }
 
-  if(!state.currentPractice.sideMarkerCoords) {
-    if(!confirm("Você não posicionou a marcação anatômica de lado (D ou E) na imagem. Deseja enviar o exame mesmo assim?")) {
+  if (!state.currentPractice.sideMarkerCoords) {
+    if (!confirm("Você não posicionou a marcação anatômica de lado (D ou E) na imagem. Deseja enviar o exame mesmo assim?")) {
       return;
     }
   }
@@ -1802,39 +1889,76 @@ function finishAndSubmitReport() {
   const subData = {
     studentId: state.currentUser.id,
     studentName: state.currentUser.name,
-    studentClass: state.currentUser.class,
+    studentClass: state.currentUser.class || "Turma Geral",
     faseId: state.currentPracticeCase.id,
     faseTitle: state.currentPracticeCase.title,
     date: new Date().toLocaleDateString('pt-BR'),
-    protocol: state.currentPractice.protocol,
-    anamnesis: state.currentPractice.anamnesis,
+    protocol: state.currentPractice.protocol || {},
+    anamnesis: state.currentPractice.anamnesis || "",
     reportText: report,
-    imageUrl: document.getElementById("radImage").src,
-    markerCoords: state.currentPractice.markerCoords,
-    sideMarkerCoords: state.currentPractice.sideMarkerCoords,
+    imageUrl: resolveExamImage(state.currentPracticeCase.patient?.images?.[state.activeImageIndex]?.url || document.getElementById("radImage").src),
+    markerCoords: state.currentPractice.markerCoords || null,
+    sideMarkerCoords: state.currentPractice.sideMarkerCoords || null,
     status: 'pendente',
     grade: null,
     feedback: ""
   };
 
-  if (db) {
-    db.collection("radx_submissions").add(subData)
-      .then(() => {
-        alert("✓ Laudo técnico, protocolo e marcações gravados no Firestore com sucesso!");
-        document.getElementById("stationScreen").classList.add("hidden");
-        initStudentPanel();
-      })
-      .catch(err => {
-        console.error(err);
-        alert("Erro ao enviar laudo para o Firebase. Verifique a conexão.");
-      });
-  } else {
-    state.submissions.unshift({ ...subData, submissionId: `sub_${Date.now()}` });
-    alert("✓ Laudo gravado com sucesso!");
+  try {
+    if (db) {
+      // Grava diretamente na coleção sga_submissions do seu banco
+      const docRef = await db.collection("sga_submissions").add(subData);
+      if (!state.submissions.some(sub => sub.submissionId === docRef.id)) {
+        state.submissions.unshift({ ...subData, submissionId: docRef.id });
+      }
+      alert("✓ Laudo técnico, protocolo e marcações gravados no Firestore com sucesso!");
+    } else {
+      state.submissions.unshift({ ...subData, submissionId: `sub_${Date.now()}` });
+      alert("✓ Laudo gravado nesta sessão!");
+    }
+
+    if (!state.currentUser.completedFases.includes(state.currentPracticeCase.id)) {
+      state.currentUser.completedFases.push(state.currentPracticeCase.id);
+    }
+
     document.getElementById("stationScreen").classList.add("hidden");
     initStudentPanel();
+  } catch (error) {
+    console.error("Erro ao enviar laudo:", error);
+    alert("Erro ao gravar no Firebase: " + error.message);
   }
 }
+function reportCloudError(error) {
+  console.error("Falha na sincronização com o Firebase:", error);
+  document.getElementById("cloudStatus").textContent = "Falha na sincronização com o Firebase. Alterações podem não ser salvas.";
+}
+
+async function initializeCloud() {
+  const status = document.createElement("p");
+  status.id = "cloudStatus";
+  status.setAttribute("role", "status");
+  status.style.cssText = "color:white;text-align:center;padding:8px;margin:0";
+  document.querySelector("header").after(status);
+  try {
+    if (!window.firebase) throw new Error("SDK do Firebase indisponível");
+    if (!/^AIza[\w-]{35}$/.test(FIREBASE_CONFIG.apiKey)) {
+      const response = await fetch("/__/firebase/init.json");
+      if (!response.ok) throw new Error("Configuração do Firebase Hosting indisponível");
+      const config = await response.json();
+      if (!config.apiKey || !config.projectId) throw new Error("Configuração inválida");
+      if (firebase.apps.length) await firebase.app().delete();
+      firebase.initializeApp(config);
+    }
+    db = firebase.firestore();
+    status.textContent = "Firebase configurado. Sincronizando dados…";
+    listenCloudUpdates();
+  } catch (error) {
+    db = null;
+    console.warn(error);
+    status.textContent = "Modo local: dados disponíveis apenas nesta sessão. Configure o Firebase para salvar e compartilhar.";
+  }
+}
+initializeCloud();
 </script>
 </body>
 </html>
