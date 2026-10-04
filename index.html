@@ -46,6 +46,9 @@
     gap: 12px;
   }
   .header-brand { display: flex; flex-direction: column; }
+  .brand-logo { display: block; width: 100%; height: auto; }
+  .header-logo { width: min(240px, 100%); background: #fff; border-radius: 10px; padding: 10px 14px; margin-bottom: 10px; }
+  .login-logo { width: min(320px, 100%); margin: 0 auto 20px; }
   .header-brand h2 { margin: 0; font-size: 1.25rem; color: #ffffff; display: flex; align-items: center; gap: 8px; }
   .header-brand .institution { font-size: 0.85rem; color: #4dd0e1; font-weight: 600; letter-spacing: 0.5px; }
   .header-brand .author-tag { font-size: 0.75rem; color: #9fb3c8; margin-top: 2px; }
@@ -278,6 +281,9 @@
 
 <header id="mainHeader">
   <div class="header-brand">
+    <div class="header-logo">
+      <img class="brand-logo" src="./imagens/radx-logo-descritor-preto.png" alt="RadX — Cursos de Radiologia">
+    </div>
     <h2>☢️ Sistema de Posicionamento e Prática Radiográfica</h2>
     <span class="institution">RadX • Plataforma de Simulação</span>
     <span class="author-tag">Desenvolvido por: <b>Yuri Maia</b></span>
@@ -294,7 +300,7 @@
   <!-- LOGIN -->
   <section id="loginScreen" class="card" style="max-width:480px; margin: 40px auto;">
     <div style="text-align:center; margin-bottom: 20px;">
-      <span style="font-size:0.95rem; font-weight:bold; color:var(--accent); text-transform:uppercase; letter-spacing:1.5px;">RadX</span>
+      <img class="brand-logo login-logo" src="./imagens/radx-logo-descritor-preto.png" alt="RadX — Cursos de Radiologia">
       <h1 style="margin-top:5px; margin-bottom:8px;">Portal Radiológico</h1>
       <p class="subtitle" style="margin-bottom:5px;">Estação Prática de Exames e Laudos Radiológicos</p>
       <small style="color:var(--text-muted);">Desenvolvido por Yuri Maia</small>
