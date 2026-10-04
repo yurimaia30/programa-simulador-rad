@@ -1,0 +1,40 @@
+const fs = require('node:fs');
+const vm = require('node:vm');
+const assert = require('node:assert/strict');
+const path = require('node:path');
+const html = fs.readFileSync(path.join(__dirname, '../index.html'), 'utf8');
+const script = [...html.matchAll(/<script>([\s\S]*?)<\/script>/g)][0][1].replace('initializeCloud();', '');
+const alerts = [];
+const context = vm.createContext({ window: {}, console, alert: message => alerts.push(message) });
+vm.runInContext(script, context);
+const run = code => vm.runInContext(code, context);
+assert.equal(run('DEFAULT_SCHEDULE.length'), 13);
+assert.equal(run('state.schedule[12].unlockedByTeacher'), false);
+assert.match(run('state.schedule[12].desc'), /Brinde para os alunos/);
+assert.equal(run('resolveExamImage("file:///D:/simulador/imagens/punho_pa.jpg")'), './imagens/punho_pa.jpg');
+assert.equal(run('resolveExamImage("javascript:alert(1)")'), '');
+assert.equal(run('mergeSchedule([{id:13, unlockedByTeacher:true}])[12].unlockedByTeacher'), false);
+assert.equal(run('mergeSchedule([{id:13, unlockedByTeacher:true, teacherReleaseRequired:true}])[12].unlockedByTeacher'), true);
+assert.equal(run('mergeSchedule([{id:1, unlockedByTeacher:false}])[0].unlockedByTeacher'), false);
+run('state.currentUser = {...state.students[0], role:"student"}; openDirectPatientIntake(13);');
+assert.equal(alerts.length, 1);
+assert.equal(run('state.currentPracticeCase'), null);
+run('state.submissions = [{studentId:"aluno101", faseId:1}, {studentId:"aluno101", faseId:1}]; updateCompletedPractices();');
+assert.equal(run('state.currentUser.completedFases.length'), 1);
+assert.equal(run('state.students[0].completedFases.length'), 1);
+async function main() {
+  await run('toggleModuleLock(13)');
+  assert.equal(run('state.schedule[12].unlockedByTeacher'), false);
+  run('state.currentUser = {role:"teacher"}; renderTeacherModuleControl = () => {};');
+  await run('toggleModuleLock(13)');
+  assert.equal(run('state.schedule[12].unlockedByTeacher'), true);
+  run('db = {collection: () => ({doc: () => ({})}), runTransaction: async () => {throw new Error("offline")}}; console.error = () => {};');
+  await run('toggleModuleLock(13)');
+  assert.equal(run('state.schedule[12].unlockedByTeacher'), true, 'Falha de gravação deve preservar a liberação');
+  const missing = [...html.matchAll(/url: "\.\/(imagens\/[^\"]+)"/g)]
+    .map(match => match[1]).filter(file => !fs.existsSync(path.join(__dirname, '..', file)));
+  assert.deepEqual(missing, ['imagens/neonatal_torax_abdomen.jpg', 'imagens/neonatal_perfil.jpg']);
+  console.log('Regressões verificadas: catálogo, migração, permissões, progresso, falha de gravação e imagens.');
+  console.log('Pendentes: ' + missing.join(', '));
+}
+main().catch(error => {console.error(error); process.exitCode = 1;});
